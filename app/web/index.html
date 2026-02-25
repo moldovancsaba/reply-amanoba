@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{reply}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>{reply}</h1>
+
+    <div class="card">
+      <h2>Choose Persona</h2>
+      <p class="note">Switch view based on what you need to do right now.</p>
+      <div class="persona-switch">
+        <button type="button" id="personaEmployeeBtn" class="btn btn-persona persona-btn">Employee</button>
+        <button type="button" id="personaEditorBtn" class="btn btn-persona persona-btn">Editor</button>
+        <button type="button" id="personaAdminBtn" class="btn btn-persona persona-btn">Admin</button>
+      </div>
+      <div id="personaHint" class="note"></div>
+    </div>
+
+    <div class="card" data-roles="admin">
+      <h2>System Health Dashboard</h2>
+      <p class="note">Shows annotation status, model availability, and support operations.</p>
+      <div class="row">
+        <select class="field" id="modelSelect"></select>
+        <button type="button" id="setModelBtn" class="btn btn-secondary">Set Active Model</button>
+        <button type="button" id="refreshModelsBtn" class="btn btn-secondary">Refresh Models</button>
+        <button type="button" id="reindexBtn" class="btn btn-secondary">Reindex Knowledge Base</button>
+        <button type="button" id="refreshDashboardBtn" class="btn btn-secondary">Refresh Dashboard</button>
+      </div>
+      <div id="modelStatus" class="note"></div>
+      <div id="dashboardMetrics" class="grid"></div>
+      <div id="dashboardMeta" class="note"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Format</th>
+              <th>Size</th>
+              <th>Annotated</th>
+              <th>Indexed Chunks</th>
+            </tr>
+          </thead>
+          <tbody id="docStatusBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" data-roles="editor">
+      <div class="row">
+        <button type="button" id="improveMeBtn" class="btn">Teach Me</button>
+        <button type="button" id="refreshOpenTicketsBtn" class="btn btn-secondary">Refresh Open Tickets</button>
+      </div>
+      <div id="activeEditorQuestion" class="question-frame"></div>
+      <div class="row">
+        <textarea class="field field-textarea" id="improveAnswer" placeholder=""></textarea>
+      </div>
+      <div id="openTicketsStatus" class="note"></div>
+      <div id="openTicketActions" class="ticket-list"></div>
+      <div class="row">
+        <button type="button" id="submitImproveAnswerBtn" class="btn">Submit Answer + Annotate</button>
+      </div>
+      <div id="improveStatus" class="note"></div>
+    </div>
+
+    <div class="card" data-roles="employee">
+      <h2>Ask a Question</h2>
+      <div class="row">
+        <input class="field" id="userId" type="text" value="employee-1" placeholder="User ID" />
+      </div>
+      <div class="row">
+        <textarea class="field field-textarea" id="question" placeholder="Ask something specific about your company documentation..."></textarea>
+      </div>
+      <div class="row">
+        <button type="button" id="askBtn" class="btn">Ask Bot</button>
+        <button type="button" id="ticketsBtn" class="btn btn-secondary">Show Open Tickets</button>
+      </div>
+      <div id="output"></div>
+    </div>
+
+    <div class="card" data-roles="admin">
+      <h2>Admin Tools</h2>
+      <p class="note">Advanced diagnostics and model comparison tools.</p>
+      <div class="row">
+        <input class="field" id="publicUrlField" type="text" readonly placeholder="Public URL will appear here" />
+        <button type="button" id="copyPublicUrlBtn" class="btn btn-secondary">Copy Public URL</button>
+        <button type="button" id="refreshPublicUrlBtn" class="btn btn-secondary">Refresh Public URL</button>
+      </div>
+      <div id="publicUrlStatus" class="note"></div>
+      <div class="row">
+        <input class="field" id="compareModels" type="text" placeholder="Compare models (comma-separated), e.g. qwen2.5:3b,llama3.2:3b" />
+        <button type="button" id="compareBtn" class="btn btn-secondary">Compare Models</button>
+      </div>
+    </div>
+
+    <div class="card" data-roles="editor">
+      <h2>Upload Corporate Documents</h2>
+      <p class="note">Supported: .pdf, .md, .txt. Uploading will reindex automatically.</p>
+      <div id="dropzone" class="dropzone">
+        Drag and drop files here, or choose files below.
+      </div>
+      <div class="row">
+        <input class="field" id="fileInput" type="file" accept=".pdf,.md,.txt" multiple />
+        <button type="button" id="uploadBtn" class="btn">Upload + Reindex</button>
+      </div>
+      <div id="uploadStatus" class="note"></div>
+    </div>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const askBtn = document.getElementById('askBtn');
+    const ticketsBtn = document.getElementById('ticketsBtn');
+    const output = document.getElementById('output');
+    const refreshDashboardBtn = document.getElementById('refreshDashboardBtn');
+    const dashboardMetrics = document.getElementById('dashboardMetrics');
+    const dashboardMeta = document.getElementById('dashboardMeta');
+    const docStatusBody = document.getElementById('docStatusBody');
+    const modelSelect = document.getElementById('modelSelect');
+    const setModelBtn = document.getElementById('setModelBtn');
+    const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+    const reindexBtn = document.getElementById('reindexBtn');
+    const modelStatus = document.getElementById('modelStatus');
+    const compareBtn = document.getElementById('compareBtn');
+    const publicUrlField = document.getElementById('publicUrlField');
+    const copyPublicUrlBtn = document.getElementById('copyPublicUrlBtn');
+    const refreshPublicUrlBtn = document.getElementById('refreshPublicUrlBtn');
+    const publicUrlStatus = document.getElementById('publicUrlStatus');
+    const questionBox = document.getElementById('question');
+    const refreshOpenTicketsBtn = document.getElementById('refreshOpenTicketsBtn');
+    const openTicketsStatus = document.getElementById('openTicketsStatus');
+    const openTicketActions = document.getElementById('openTicketActions');
+    const activeEditorQuestion = document.getElementById('activeEditorQuestion');
+    const improveMeBtn = document.getElementById('improveMeBtn');
+    const improveAnswer = document.getElementById('improveAnswer');
+    const submitImproveAnswerBtn = document.getElementById('submitImproveAnswerBtn');
+    const improveStatus = document.getElementById('improveStatus');
+    const personaEmployeeBtn = document.getElementById('personaEmployeeBtn');
+    const personaEditorBtn = document.getElementById('personaEditorBtn');
+    const personaAdminBtn = document.getElementById('personaAdminBtn');
+    const personaHint = document.getElementById('personaHint');
+    let droppedFiles = null;
+    let currentImproveQuestion = null;
+    let currentAnswerTarget = null;
+    document.addEventListener('submit', (e) => e.preventDefault());
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      if (!dropzone.contains(e.target)) {
+        e.preventDefault();
+      }
+    });
+
+    async function parseJsonSafe(res) {
+      const raw = await res.text();
+      if (!raw) return {};
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return { raw };
+      }
+    }
+
+    function setOutput(text, className = '') {
+      output.className = className;
+      output.textContent = text;
+    }
+
+    function applyPersona(persona) {
+      const all = document.querySelectorAll('[data-roles]');
+      all.forEach((el) => {
+        const allowed = (el.dataset.roles || '').split(',').map(s => s.trim()).filter(Boolean);
+        el.classList.toggle('hidden', !allowed.includes(persona));
+      });
+
+      personaEmployeeBtn.classList.toggle('active', persona === 'employee');
+      personaEditorBtn.classList.toggle('active', persona === 'editor');
+      personaAdminBtn.classList.toggle('active', persona === 'admin');
+
+      const hints = {
+        employee: 'Employee view: ask questions based on company knowledge.',
+        editor: 'Editor view: upload docs, answer escalations, and clarify bot knowledge.',
+        admin: 'Admin view: monitor health, models, and administrative tools.',
+      };
+      personaHint.textContent = hints[persona] || hints.employee;
+      localStorage.setItem('helpbot_persona', persona);
+      if (persona === 'admin') {
+        loadPublicUrl();
+      }
+    }
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      droppedFiles = e.dataTransfer.files;
+      uploadStatus.textContent = `${droppedFiles.length} file(s) selected (drag-and-drop)`;
+    });
+
+    fileInput.addEventListener('change', () => {
+      droppedFiles = null;
+      uploadStatus.textContent = `${fileInput.files.length} file(s) selected`;
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+      const files = droppedFiles || fileInput.files;
+      if (!files.length) {
+        uploadStatus.textContent = 'Please select at least one file.';
+        return;
+      }
+
+      uploadStatus.textContent = 'Uploading...';
+      const form = new FormData();
+      for (const f of files) form.append('files', f);
+
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: form });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          uploadStatus.textContent = `Upload failed: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        const saved = data.saved?.length || 0;
+        const rejected = data.rejected?.length || 0;
+        uploadStatus.textContent = `Done. Saved: ${saved}, Rejected: ${rejected}, Indexed chunks: ${data.indexed_chunks ?? 'n/a'}, Clarification questions: ${data.generated_enrichment_questions ?? 0}`;
+        droppedFiles = null;
+        fileInput.value = '';
+        await loadDashboard();
+        await loadImproveMe();
+      } catch (err) {
+        uploadStatus.textContent = `Upload failed: ${err}`;
+      }
+    });
+
+    reindexBtn.addEventListener('click', async () => {
+      modelStatus.textContent = 'Reindexing knowledge base...';
+      try {
+        const res = await fetch('/ingest/reindex', { method: 'POST' });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          modelStatus.textContent = `Reindex failed: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        modelStatus.textContent = `Reindex complete. Indexed chunks: ${data.indexed_chunks ?? 0}`;
+        await loadDashboard();
+      } catch (err) {
+        modelStatus.textContent = `Reindex failed: ${err}`;
+      }
+    });
+
+    askBtn.addEventListener('click', async () => {
+      const userId = document.getElementById('userId').value.trim() || 'employee-1';
+      const question = document.getElementById('question').value.trim();
+      const model = modelSelect.value || null;
+      if (!question) {
+        setOutput('Please type a question.', 'warn');
+        return;
+      }
+
+      setOutput('Thinking...');
+      try {
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, question, model })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          setOutput(`Request failed: ${data.detail || data.raw || 'unknown error'}`, 'warn');
+          return;
+        }
+
+        if (data.status === 'answered') {
+          const cites = data.citations?.length ? `\n\nCitations:\n- ${data.citations.join('\n- ')}` : '';
+          setOutput(`${data.answer}${cites}`, 'ok');
+          if (data.active_model) {
+            modelStatus.textContent = `Active model: ${data.active_model}`;
+          }
+          await loadDashboard();
+          return;
+        }
+
+        setOutput(`Escalated to editor. Ticket #${data.ticket_id}\nReason: ${data.reason || 'Insufficient context.'}`, 'warn');
+        if (data.active_model) {
+          modelStatus.textContent = `Active model: ${data.active_model}`;
+        }
+        await loadOpenTickets();
+      } catch (err) {
+        setOutput(`Request failed: ${err}`, 'warn');
+      }
+    });
+
+    questionBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        askBtn.click();
+      }
+    });
+
+    compareBtn.addEventListener('click', async () => {
+      const userId = document.getElementById('userId').value.trim() || 'employee-1';
+      const question = document.getElementById('question').value.trim();
+      const csv = document.getElementById('compareModels').value.trim();
+      if (!question) {
+        setOutput('Please type a question.', 'warn');
+        return;
+      }
+      if (!csv) {
+        setOutput('Please enter at least two models to compare.', 'warn');
+        return;
+      }
+
+      const models = csv.split(',').map(s => s.trim()).filter(Boolean);
+      if (models.length < 2) {
+        setOutput('Please enter at least two models to compare.', 'warn');
+        return;
+      }
+
+      setOutput('Running model comparison...');
+      try {
+        const res = await fetch('/ask/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, question, models })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          setOutput(`Compare failed: ${data.detail || data.raw || 'unknown error'}`, 'warn');
+          return;
+        }
+        if (data.status !== 'ok') {
+          setOutput(`Compare status: ${data.status}\nReason: ${data.reason || 'n/a'}`, 'warn');
+          return;
+        }
+        const lines = [];
+        for (const r of data.results || []) {
+          lines.push(`Model: ${r.model}`);
+          lines.push(`Status: ${r.status}${r.reason ? ' (' + r.reason + ')' : ''}`);
+          if (r.answer) lines.push(`Answer: ${r.answer}`);
+          lines.push('---');
+        }
+        setOutput(lines.join('\n'));
+      } catch (err) {
+        setOutput(`Compare failed: ${err}`, 'warn');
+      }
+    });
+
+    ticketsBtn.addEventListener('click', async () => {
+      setOutput('Loading open tickets...');
+      try {
+        const res = await fetch('/tickets/open');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          setOutput(`Could not load tickets: ${data.detail || data.raw || 'unknown error'}`, 'warn');
+          return;
+        }
+        const tickets = data.tickets || [];
+        if (!tickets.length) {
+          setOutput('No open tickets.', 'ok');
+          return;
+        }
+        const lines = tickets.map(t => `#${t.id} | ${t.user_id} | ${t.question}`);
+        setOutput(`Open tickets:\n${lines.join('\n')}`);
+      } catch (err) {
+        setOutput(`Could not load tickets: ${err}`, 'warn');
+      }
+    });
+
+    function renderMetric(label, value) {
+      const div = document.createElement('div');
+      div.className = 'metric';
+      div.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+      return div;
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    async function loadDashboard() {
+      dashboardMetrics.innerHTML = '';
+      dashboardMeta.textContent = 'Loading dashboard...';
+      docStatusBody.innerHTML = '';
+
+      try {
+        const res = await fetch('/dashboard/health');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          dashboardMeta.textContent = `Could not load dashboard: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        const annotation = data.annotation || {};
+        const ops = data.operations || {};
+        const system = data.system || {};
+        const llm = system.llm || {};
+        const tickets = ops.tickets || {};
+        const interactions = ops.interactions || {};
+        const enrichment = ops.enrichment || {};
+
+        dashboardMetrics.appendChild(renderMetric('LLM Reachable', llm.reachable ? 'Yes' : 'No'));
+        dashboardMetrics.appendChild(renderMetric('Model Loaded', llm.model_available ? 'Yes' : 'No'));
+        dashboardMetrics.appendChild(renderMetric('Active Model', system.active_model || 'n/a'));
+        dashboardMetrics.appendChild(renderMetric('Uploaded Docs', annotation.uploaded_docs_count ?? 0));
+        dashboardMetrics.appendChild(renderMetric('Indexed Chunks', annotation.indexed_chunks_total ?? 0));
+        dashboardMetrics.appendChild(renderMetric('Open Tickets', tickets.open_count ?? 0));
+        dashboardMetrics.appendChild(renderMetric('Open Clarifications', enrichment.open_count ?? 0));
+        dashboardMetrics.appendChild(renderMetric('Answer Rate', `${ops.answer_rate_percent ?? 0}%`));
+
+        const lastIndexed = annotation.last_indexed_at || 'n/a';
+        dashboardMeta.textContent = `Docs folder: ${annotation.docs_folder || 'n/a'} | Last indexed: ${lastIndexed} | Embed model: ${system.embedding_model || 'n/a'}`;
+
+        const rows = annotation.document_status || [];
+        if (!rows.length) {
+          docStatusBody.innerHTML = '<tr><td colspan="5">No uploaded docs yet.</td></tr>';
+        } else {
+          rows.forEach((doc) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${doc.filename}</td>
+              <td>${doc.format}</td>
+              <td>${formatSize(doc.size_bytes || 0)}</td>
+              <td>${doc.annotated ? 'Yes' : 'No'}</td>
+              <td>${doc.indexed_chunks || 0}</td>
+            `;
+            docStatusBody.appendChild(tr);
+          });
+        }
+      } catch (err) {
+        dashboardMeta.textContent = `Could not load dashboard: ${err}`;
+      }
+    }
+
+    async function loadModels() {
+      modelStatus.textContent = 'Loading models...';
+      modelSelect.innerHTML = '';
+      try {
+        const res = await fetch('/models');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          modelStatus.textContent = `Could not load models: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        const models = data.available_models || [];
+        const active = data.active_model || '';
+
+        if (!models.length) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No local models found';
+          modelSelect.appendChild(opt);
+          modelStatus.textContent = 'No Ollama models found. Pull one with: ollama pull qwen2.5:3b';
+          return;
+        }
+
+        for (const model of models) {
+          const opt = document.createElement('option');
+          opt.value = model;
+          opt.textContent = model;
+          if (model === active) opt.selected = true;
+          modelSelect.appendChild(opt);
+        }
+
+        modelStatus.textContent = `Active model: ${active}`;
+      } catch (err) {
+        modelStatus.textContent = `Could not load models: ${err}`;
+      }
+    }
+
+    setModelBtn.addEventListener('click', async () => {
+      const model = modelSelect.value;
+      if (!model) {
+        modelStatus.textContent = 'No model selected.';
+        return;
+      }
+      modelStatus.textContent = 'Setting active model...';
+      try {
+        const res = await fetch('/models/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          modelStatus.textContent = `Could not set model: ${data.detail || 'unknown error'}`;
+          return;
+        }
+        modelStatus.textContent = `Active model set to: ${data.active_model}`;
+        await loadDashboard();
+      } catch (err) {
+        modelStatus.textContent = `Could not set model: ${err}`;
+      }
+    });
+
+    function selectTicketForAnswer(ticket) {
+      currentAnswerTarget = { type: 'ticket', id: ticket.id, question: ticket.question };
+      activeEditorQuestion.textContent = ticket.question;
+      improveStatus.textContent = `Selected escalated ticket #${ticket.id}. Write answer and submit.`;
+      improveAnswer.focus();
+      loadOpenTickets();
+    }
+
+    async function loadOpenTickets() {
+      openTicketsStatus.textContent = 'Loading open tickets...';
+      openTicketActions.innerHTML = '';
+      try {
+        const res = await fetch('/tickets/open');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          openTicketsStatus.textContent = `Could not load open tickets: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        const tickets = data.tickets || [];
+        if (!tickets.length) {
+          openTicketsStatus.textContent = 'No open tickets.';
+          return;
+        }
+        const selectedTicketId = currentAnswerTarget?.type === 'ticket' ? currentAnswerTarget.id : null;
+        const visibleTickets = selectedTicketId ? tickets.filter((t) => t.id !== selectedTicketId) : tickets;
+        if (selectedTicketId) {
+          openTicketsStatus.textContent = `Open tickets: ${tickets.length} (selected ticket shown above)`;
+        } else {
+          openTicketsStatus.textContent = `Open tickets: ${tickets.length}`;
+        }
+        if (!visibleTickets.length) {
+          return;
+        }
+        visibleTickets.forEach((t) => {
+          const line = document.createElement('div');
+          line.className = 'ticket-row';
+
+          const txt = document.createElement('div');
+          txt.className = 'ticket-text';
+          txt.textContent = t.question;
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-secondary';
+          btn.textContent = 'Answer';
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            selectTicketForAnswer(t);
+          });
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'btn btn-danger';
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const ok = window.confirm('Remove this ticket from the process?');
+            if (!ok) return;
+            improveStatus.textContent = `Removing ticket #${t.id}...`;
+            try {
+              const res = await fetch('/tickets/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticket_id: t.id, reason: 'Removed by editor' })
+              });
+              const data = await parseJsonSafe(res);
+              if (!res.ok) {
+                improveStatus.textContent = `Could not remove ticket: ${data.detail || data.raw || 'unknown error'}`;
+                return;
+              }
+              if (currentAnswerTarget?.type === 'ticket' && currentAnswerTarget.id === t.id) {
+                currentAnswerTarget = null;
+                activeEditorQuestion.textContent = '';
+              }
+              improveStatus.textContent = `Ticket #${t.id} removed from process.`;
+              await loadOpenTickets();
+              await loadDashboard();
+              await loadImproveMe();
+            } catch (err) {
+              improveStatus.textContent = `Could not remove ticket: ${err}`;
+            }
+          });
+
+          line.appendChild(txt);
+          line.appendChild(btn);
+          line.appendChild(deleteBtn);
+          openTicketActions.appendChild(line);
+        });
+      } catch (err) {
+        openTicketsStatus.textContent = `Could not load open tickets: ${err}`;
+      }
+    }
+
+    async function loadImproveMe() {
+      improveStatus.textContent = 'Loading next clarification question...';
+      currentImproveQuestion = null;
+      try {
+        const res = await fetch('/enrichment/improve-me');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          improveStatus.textContent = `Could not load clarification question: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        if (data.status === 'empty' || !data.question) {
+          const auto = data.auto_generated ?? 0;
+          if (!currentAnswerTarget) {
+            activeEditorQuestion.textContent = '';
+          }
+          improveStatus.textContent = auto > 0
+            ? `Generated ${auto} new clarification questions, but none could be loaded. Try again.`
+            : 'No open clarification questions right now.';
+          return;
+        }
+        currentImproveQuestion = data.question;
+        currentAnswerTarget = { type: 'clarification', id: data.question.id, question: data.question.question };
+        activeEditorQuestion.textContent = data.question.question;
+        const auto = data.auto_generated ?? 0;
+        improveStatus.textContent = auto > 0
+          ? `Auto-generated ${auto} new clarification questions from tickets/context.`
+          : 'Answer this and submit to improve the bot.';
+      } catch (err) {
+        improveStatus.textContent = `Could not load clarification question: ${err}`;
+      }
+    }
+
+    async function generateAndLoadImproveMe() {
+      improveStatus.textContent = 'Preparing the next clarification question...';
+      try {
+        if (currentAnswerTarget?.type === 'clarification') {
+          const escRes = await fetch('/enrichment/escalate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_id: currentAnswerTarget.id,
+              user_id: 'editor-unknown',
+              reason: 'Editor requested a new clarification question'
+            })
+          });
+          const escData = await parseJsonSafe(escRes);
+          if (!escRes.ok) {
+            improveStatus.textContent = `Could not escalate previous question: ${escData.detail || escData.raw || 'unknown error'}`;
+            return;
+          }
+          await loadOpenTickets();
+        }
+
+        const res = await fetch('/enrichment/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questions_per_doc: 1, include_ticket_based: true, include_general_knowledge: true })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          improveStatus.textContent = `Could not generate question: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        await loadImproveMe();
+      } catch (err) {
+        improveStatus.textContent = `Could not generate question: ${err}`;
+      }
+    }
+
+    async function loadPublicUrl() {
+      publicUrlStatus.textContent = 'Loading public URL...';
+      publicUrlField.value = '';
+      try {
+        const res = await fetch('/admin/public-url');
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          publicUrlStatus.textContent = `Could not load public URL: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        if (!data.public_url) {
+          publicUrlStatus.textContent = 'No active public URL found. Start launcher to create one.';
+          return;
+        }
+        publicUrlField.value = data.public_url;
+        publicUrlStatus.textContent = 'Public URL ready to share.';
+      } catch (err) {
+        publicUrlStatus.textContent = `Could not load public URL: ${err}`;
+      }
+    }
+
+    submitImproveAnswerBtn.addEventListener('click', async () => {
+      const answer = (improveAnswer.value || '').trim();
+      if (!currentAnswerTarget) {
+        improveStatus.textContent = 'Select a ticket with Answer or click Improve Me! first.';
+        return;
+      }
+      if (!answer) {
+        improveStatus.textContent = 'Please write an answer.';
+        return;
+      }
+
+      improveStatus.textContent = 'Saving answer and annotating...';
+      try {
+        let res;
+        let data;
+        if (currentAnswerTarget.type === 'ticket') {
+          res = await fetch('/editor/respond', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_id: currentAnswerTarget.id, editor_answer: answer, source_label: 'editor-validated' })
+          });
+          data = await parseJsonSafe(res);
+          if (!res.ok) {
+            improveStatus.textContent = `Could not submit answer: ${data.detail || data.raw || 'unknown error'}`;
+            return;
+          }
+          improveStatus.textContent = `Saved. Ticket #${data.ticket_id} resolved and annotated.`;
+        } else {
+          res = await fetch('/enrichment/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question_id: currentAnswerTarget.id, answer, source_label: 'editor-clarification' })
+          });
+          data = await parseJsonSafe(res);
+          if (!res.ok) {
+            improveStatus.textContent = `Could not submit answer: ${data.detail || data.raw || 'unknown error'}`;
+            return;
+          }
+          improveStatus.textContent = `Saved. Clarification #${data.question_id} annotated.`;
+        }
+        improveAnswer.value = '';
+        currentAnswerTarget = null;
+        activeEditorQuestion.textContent = '';
+        await loadDashboard();
+        await loadOpenTickets();
+        await loadImproveMe();
+      } catch (err) {
+        improveStatus.textContent = `Could not submit answer: ${err}`;
+      }
+    });
+
+    refreshModelsBtn.addEventListener('click', loadModels);
+    refreshDashboardBtn.addEventListener('click', loadDashboard);
+    refreshOpenTicketsBtn.addEventListener('click', loadOpenTickets);
+    improveMeBtn.addEventListener('click', generateAndLoadImproveMe);
+    refreshPublicUrlBtn.addEventListener('click', loadPublicUrl);
+    copyPublicUrlBtn.addEventListener('click', async () => {
+      if (!publicUrlField.value) {
+        publicUrlStatus.textContent = 'No public URL to copy.';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(publicUrlField.value);
+        publicUrlStatus.textContent = 'Public URL copied.';
+      } catch {
+        publicUrlStatus.textContent = 'Copy failed. Please copy manually from the field.';
+      }
+    });
+    personaEmployeeBtn.addEventListener('click', () => applyPersona('employee'));
+    personaEditorBtn.addEventListener('click', () => applyPersona('editor'));
+    personaAdminBtn.addEventListener('click', () => applyPersona('admin'));
+    loadModels();
+    loadDashboard();
+    loadOpenTickets();
+    loadImproveMe();
+    loadPublicUrl();
+    applyPersona(localStorage.getItem('helpbot_persona') || 'employee');
+  </script>
+</body>
+</html>
