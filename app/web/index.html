@@ -18,6 +18,11 @@
         <button type="button" id="personaEditorBtn" class="btn btn-persona persona-btn">Editor</button>
         <button type="button" id="personaAdminBtn" class="btn btn-persona persona-btn">Admin</button>
       </div>
+      <div class="row">
+        <input class="field" id="actorField" type="text" value="local-dev" placeholder="Actor ID (audit identity)" />
+        <input class="field" id="apiTokenField" type="password" placeholder="API token (required when AUTH_ENABLED=1)" />
+      </div>
+      <div class="note">When token auth is enabled, paste the persona token here so requests pass server-side RBAC.</div>
       <div id="personaHint" class="note"></div>
     </div>
 
@@ -179,9 +184,15 @@
     const personaEditorBtn = document.getElementById('personaEditorBtn');
     const personaAdminBtn = document.getElementById('personaAdminBtn');
     const personaHint = document.getElementById('personaHint');
+    const actorField = document.getElementById('actorField');
+    const apiTokenField = document.getElementById('apiTokenField');
     let droppedFiles = null;
     let currentImproveQuestion = null;
     let currentAnswerTarget = null;
+    actorField.value = localStorage.getItem('helpbot_actor') || actorField.value || 'local-dev';
+    apiTokenField.value = localStorage.getItem('helpbot_api_token') || '';
+    actorField.addEventListener('input', () => localStorage.setItem('helpbot_actor', actorField.value || ''));
+    apiTokenField.addEventListener('input', () => localStorage.setItem('helpbot_api_token', apiTokenField.value || ''));
     document.addEventListener('submit', (e) => e.preventDefault());
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => {
@@ -189,6 +200,27 @@
         e.preventDefault();
       }
     });
+
+    function withAuthHeaders(existing = {}) {
+      const headers = { ...(existing || {}) };
+      const token = (apiTokenField.value || '').trim();
+      const actor = (actorField.value || '').trim();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['X-API-Token'] = token;
+      }
+      if (actor) {
+        headers['X-Actor'] = actor;
+      }
+      return headers;
+    }
+
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      const next = { ...(init || {}) };
+      next.headers = withAuthHeaders(next.headers || {});
+      return nativeFetch(input, next);
+    };
 
     async function parseJsonSafe(res) {
       const raw = await res.text();
@@ -749,8 +781,26 @@
           download.type = 'button';
           download.className = 'btn btn-secondary';
           download.textContent = 'Download';
-          download.addEventListener('click', () => {
-            window.open(exp.download_url, '_blank');
+          download.addEventListener('click', async () => {
+            try {
+              const res = await fetch(exp.download_url, { method: 'GET' });
+              if (!res.ok) {
+                const data = await parseJsonSafe(res);
+                qaExportStatus.textContent = `Download failed: ${data.detail || data.raw || 'unknown error'}`;
+                return;
+              }
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = exp.filename || 'qa-export';
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              qaExportStatus.textContent = `Download failed: ${err}`;
+            }
           });
 
           const copy = document.createElement('button');

@@ -13,16 +13,26 @@
   - embeddable script (`/static/webchat.js`)
   - admin snippet endpoint (`/admin/webchat/snippet`)
   - chat auth (token), CORS allowlist, rate limit
+- Server-side RBAC:
+  - role-token enforcement for protected endpoints
+  - configurable via `AUTH_ENABLED`, `ADMIN_API_TOKEN`, `EDITOR_API_TOKEN`, `EMPLOYEE_API_TOKEN`
+- Immutable audit trail:
+  - `audit_events` table
+  - DB triggers reject update/delete
+  - admin endpoint: `GET /admin/audit`
 - Q/A archival and export:
   - every logged interaction saved into `qa_documents`
   - export endpoints for `jsonl`, `csv`, `md`, `pdf`
   - admin UI actions to create/download exports
+- CI gates on push/PR:
+  - `.github/workflows/ci.yml`
+  - dependency install + compile checks + pytest
 
 ## In Progress / Next
-- Hard security/RBAC + immutable audit trail.
-- CI tests for installer/update/chat/export.
 - Fleet-grade update orchestration and rollback verification tests.
 - Better dependency adapters for Linux/Windows package managers.
+- Stronger token/session management (rotation/expiration).
+- Signed audit export bundles for off-host tamper evidence.
 
 ## Operational Notes
 - Exports are written under `EXPORTS_PATH` (`./data/exports` by default).

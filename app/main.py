@@ -261,6 +261,81 @@ def require_chat_access(request: Request, apply_rate_limit: bool = False) -> Non
         check_chat_rate_limit(request)
 
 
+def configured_role_tokens() -> dict[str, str]:
+    tokens = {
+        "admin": settings.admin_api_token.strip(),
+        "editor": settings.editor_api_token.strip(),
+        "employee": settings.employee_api_token.strip(),
+    }
+    return {k: v for k, v in tokens.items() if v}
+
+
+def auth_is_active() -> bool:
+    return settings.auth_enabled and bool(configured_role_tokens())
+
+
+def request_token(request: Request) -> str:
+    auth = (request.headers.get("authorization") or "").strip()
+    header_token = (request.headers.get("x-api-token") or "").strip()
+    bearer = ""
+    if auth.lower().startswith("bearer "):
+        bearer = auth[7:].strip()
+    return bearer or header_token
+
+
+def auth_context(request: Request) -> dict:
+    if not auth_is_active():
+        role = (request.headers.get("x-role") or "admin").strip().lower() or "admin"
+        actor = (request.headers.get("x-actor") or "local-dev").strip() or "local-dev"
+        return {"role": role, "actor": actor}
+
+    token = request_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing API token")
+
+    role = None
+    for r, t in configured_role_tokens().items():
+        if token == t:
+            role = r
+            break
+    if not role:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    actor = (
+        (request.headers.get("x-actor") or "").strip()
+        or (request.headers.get("x-user-id") or "").strip()
+        or f"{role}-user"
+    )
+    return {"role": role, "actor": actor}
+
+
+def require_roles(request: Request, allowed: set[str]) -> dict:
+    ctx = auth_context(request)
+    if ctx["role"] not in allowed:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    return ctx
+
+
+def audit_event(
+    request: Request,
+    ctx: dict,
+    action: str,
+    target_type: str,
+    target_id: str,
+    details: dict | None = None,
+) -> int:
+    payload = dict(details or {})
+    payload["ip"] = request.client.host if request.client else "unknown"
+    return db.log_audit(
+        actor=ctx.get("actor", "unknown"),
+        role=ctx.get("role", "unknown"),
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        details=payload,
+    )
+
+
 def export_name(ext: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return f"qa-export-{stamp}.{ext}"
@@ -747,13 +822,23 @@ def web_ui() -> FileResponse:
 
 
 @app.post("/ingest/reindex")
-def ingest_reindex() -> dict:
+def ingest_reindex(request: Request) -> dict:
+    ctx = require_roles(request, {"admin"})
     count = reindex_docs(db=db, embedder=embedder, docs_path=settings.docs_path)
+    audit_event(
+        request,
+        ctx,
+        action="reindex_docs",
+        target_type="knowledge_base",
+        target_id="docs",
+        details={"indexed_chunks": count, "docs_path": str(settings.docs_path)},
+    )
     return {"indexed_chunks": count, "docs_path": str(settings.docs_path)}
 
 
 @app.get("/dashboard/health")
-def dashboard_health() -> dict:
+def dashboard_health(request: Request) -> dict:
+    require_roles(request, {"admin"})
     docs = db.docs_summary()
     tickets = db.tickets_summary()
     interactions = db.interactions_summary()
@@ -801,7 +886,8 @@ def dashboard_health() -> dict:
 
 
 @app.get("/models")
-def models() -> dict:
+def models(request: Request) -> dict:
+    require_roles(request, {"employee", "editor", "admin"})
     return {
         "active_model": active_model["name"],
         "available_models": ollama_models(),
@@ -809,13 +895,22 @@ def models() -> dict:
 
 
 @app.get("/admin/public-url")
-def admin_public_url() -> dict:
+def admin_public_url(request: Request) -> dict:
+    require_roles(request, {"admin"})
     url = current_public_url()
     return {"public_url": url}
 
 
+@app.get("/admin/audit")
+def admin_audit(request: Request, limit: int = 200) -> dict:
+    require_roles(request, {"admin"})
+    rows = db.recent_audit_events(limit=limit)
+    return {"count": len(rows), "events": rows}
+
+
 @app.get("/admin/language-policy")
-def admin_language_policy() -> dict:
+def admin_language_policy(request: Request) -> dict:
+    require_roles(request, {"admin"})
     return {
         "primary_language": language_policy["primary"],
         "allowed_languages": language_policy["allowed"],
@@ -824,9 +919,21 @@ def admin_language_policy() -> dict:
 
 
 @app.post("/admin/language-policy")
-def admin_set_language_policy(payload: LanguagePolicyRequest) -> dict:
+def admin_set_language_policy(payload: LanguagePolicyRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"admin"})
     global language_policy
     language_policy = save_language_policy(payload.primary_language, payload.allowed_languages)
+    audit_event(
+        request,
+        ctx,
+        action="set_language_policy",
+        target_type="settings",
+        target_id="language_policy",
+        details={
+            "primary_language": language_policy["primary"],
+            "allowed_languages": language_policy["allowed"],
+        },
+    )
     return {
         "status": "ok",
         "primary_language": language_policy["primary"],
@@ -835,16 +942,27 @@ def admin_set_language_policy(payload: LanguagePolicyRequest) -> dict:
 
 
 @app.post("/models/select")
-def select_model(payload: ModelSelectRequest) -> dict:
+def select_model(payload: ModelSelectRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"admin"})
     available = ollama_models()
     if payload.model not in available:
         raise HTTPException(status_code=400, detail=f"Model not installed. Available: {available}")
+    old_model = active_model["name"]
     active_model["name"] = payload.model
+    audit_event(
+        request,
+        ctx,
+        action="select_model",
+        target_type="model",
+        target_id=payload.model,
+        details={"old_model": old_model, "new_model": payload.model},
+    )
     return {"status": "ok", "active_model": active_model["name"]}
 
 
 @app.get("/admin/webchat/snippet")
 def admin_webchat_snippet(request: Request) -> dict:
+    require_roles(request, {"admin"})
     base_url = current_public_url() or str(request.base_url).rstrip("/")
     token_hint = "<CHAT_API_TOKEN>"
     snippet = (
@@ -882,6 +1000,14 @@ def chat_create_session(payload: ChatSessionCreateRequest, request: Request) -> 
         source=payload.source,
         metadata=payload.metadata,
     )
+    db.log_audit(
+        actor=payload.user_id,
+        role="chat",
+        action="chat_create_session",
+        target_type="chat_session",
+        target_id=session_id,
+        details={"source": payload.source, "ip": request.client.host if request.client else "unknown"},
+    )
     return {"status": "ok", "session_id": session_id}
 
 
@@ -906,7 +1032,10 @@ def chat_message(payload: ChatMessageRequest, request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     db.append_chat_message(payload.session_id, role="user", content=message, status="received")
-    ask_result = ask(AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"))
+    ask_result = ask(
+        AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"),
+        request=request,
+    )
 
     if ask_result.status == "answered":
         assistant_text = ask_result.answer or ""
@@ -922,6 +1051,18 @@ def chat_message(payload: ChatMessageRequest, request: Request) -> dict:
         content=assistant_text,
         status=ask_result.status,
         citations=ask_result.citations,
+    )
+    db.log_audit(
+        actor=session["user_id"],
+        role="chat",
+        action="chat_message",
+        target_type="chat_session",
+        target_id=payload.session_id,
+        details={
+            "status": ask_result.status,
+            "ticket_id": ask_result.ticket_id,
+            "ip": request.client.host if request.client else "unknown",
+        },
     )
 
     return {
@@ -944,7 +1085,10 @@ def chat_stream(payload: ChatMessageRequest, request: Request) -> StreamingRespo
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     db.append_chat_message(payload.session_id, role="user", content=message, status="received")
-    ask_result = ask(AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"))
+    ask_result = ask(
+        AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"),
+        request=request,
+    )
     assistant_text = ask_result.answer or ""
     if ask_result.status != "answered":
         assistant_text = (
@@ -957,6 +1101,18 @@ def chat_stream(payload: ChatMessageRequest, request: Request) -> StreamingRespo
         content=assistant_text,
         status=ask_result.status,
         citations=ask_result.citations,
+    )
+    db.log_audit(
+        actor=session["user_id"],
+        role="chat",
+        action="chat_stream_message",
+        target_type="chat_session",
+        target_id=payload.session_id,
+        details={
+            "status": ask_result.status,
+            "ticket_id": ask_result.ticket_id,
+            "ip": request.client.host if request.client else "unknown",
+        },
     )
 
     payload_json = {
@@ -976,7 +1132,13 @@ def chat_stream(payload: ChatMessageRequest, request: Request) -> StreamingRespo
 
 
 @app.post("/upload")
-async def upload_docs(files: list[UploadFile] = File(...), reindex: bool = True, enrich: bool = True) -> dict:
+async def upload_docs(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    reindex: bool = True,
+    enrich: bool = True,
+) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     settings.docs_path.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
     rejected: list[dict] = []
@@ -1012,11 +1174,25 @@ async def upload_docs(files: list[UploadFile] = File(...), reindex: bool = True,
             generated_count += add_enrichment_questions_unique(source_doc=doc_name, questions=questions)
         result["generated_enrichment_questions"] = generated_count
 
+    audit_event(
+        request,
+        ctx,
+        action="upload_docs",
+        target_type="document_batch",
+        target_id=str(len(saved)),
+        details={
+            "saved": saved,
+            "rejected": rejected,
+            "indexed_chunks": result.get("indexed_chunks", 0),
+            "generated_enrichment_questions": result.get("generated_enrichment_questions", 0),
+        },
+    )
     return result
 
 
 @app.post("/enrichment/generate")
-def enrichment_generate(payload: EnrichmentGenerateRequest) -> dict:
+def enrichment_generate(payload: EnrichmentGenerateRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     docs = payload.source_docs or [d["filename"] for d in docs_annotation_status()]
     created = 0
     per_doc: dict[str, int] = {}
@@ -1046,16 +1222,27 @@ def enrichment_generate(payload: EnrichmentGenerateRequest) -> dict:
         created += added
         per_doc["_SYSTEM_CONTEXT_"] = per_doc.get("_SYSTEM_CONTEXT_", 0) + added
 
-    return {"status": "ok", "created_questions": created, "by_doc": per_doc}
+    result = {"status": "ok", "created_questions": created, "by_doc": per_doc}
+    audit_event(
+        request,
+        ctx,
+        action="generate_enrichment_questions",
+        target_type="enrichment",
+        target_id="batch",
+        details=result,
+    )
+    return result
 
 
 @app.get("/enrichment/open")
-def enrichment_open() -> dict:
+def enrichment_open(request: Request) -> dict:
+    require_roles(request, {"editor", "admin"})
     return {"questions": db.open_enrichment_questions()}
 
 
 @app.get("/enrichment/improve-me")
-def enrichment_improve_me() -> dict:
+def enrichment_improve_me(request: Request) -> dict:
+    require_roles(request, {"editor", "admin"})
     def pick_next_compliant() -> dict | None:
         open_questions = db.open_enrichment_questions()
         target = language_policy["primary"]
@@ -1082,7 +1269,8 @@ def enrichment_improve_me() -> dict:
 
 
 @app.post("/enrichment/answer")
-def enrichment_answer(payload: EnrichmentAnswerRequest) -> dict:
+def enrichment_answer(payload: EnrichmentAnswerRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     q = db.get_enrichment_question(payload.question_id)
     if not q or q["status"] != "open":
         raise HTTPException(status_code=404, detail="Open enrichment question not found")
@@ -1097,11 +1285,21 @@ def enrichment_answer(payload: EnrichmentAnswerRequest) -> dict:
         content=materialized,
         embedding=vec,
     )
-    return {"status": "answered_and_indexed", "question_id": payload.question_id}
+    result = {"status": "answered_and_indexed", "question_id": payload.question_id}
+    audit_event(
+        request,
+        ctx,
+        action="answer_enrichment_question",
+        target_type="enrichment_question",
+        target_id=str(payload.question_id),
+        details={"source_label": payload.source_label, "source_doc": q["source_doc"]},
+    )
+    return result
 
 
 @app.post("/enrichment/escalate")
-def enrichment_escalate(payload: EnrichmentEscalateRequest) -> dict:
+def enrichment_escalate(payload: EnrichmentEscalateRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     q = db.get_enrichment_question(payload.question_id)
     if not q or q["status"] != "open":
         raise HTTPException(status_code=404, detail="Open enrichment question not found")
@@ -1117,15 +1315,27 @@ def enrichment_escalate(payload: EnrichmentEscalateRequest) -> dict:
         ticket_id=ticket_id,
         source="enrichment",
     )
-    return {
+    result = {
         "status": "escalated_to_ticket",
         "question_id": payload.question_id,
         "ticket_id": ticket_id,
     }
+    audit_event(
+        request,
+        ctx,
+        action="escalate_enrichment_question",
+        target_type="enrichment_question",
+        target_id=str(payload.question_id),
+        details={"ticket_id": ticket_id, "reason": payload.reason},
+    )
+    return result
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask(payload: AskRequest) -> AskResponse:
+def ask(payload: AskRequest, request: Request) -> AskResponse:
+    # Webchat endpoints already enforce chat token/origin/rate-limit before delegating here.
+    if (payload.source or "").strip().lower() != "webchat":
+        require_roles(request, {"employee", "editor", "admin"})
     source = re.sub(r"[^a-z0-9_-]+", "-", (payload.source or "ask").strip().lower())[:32] or "ask"
     hits = retrieve(
         db=db,
@@ -1363,7 +1573,8 @@ def ask(payload: AskRequest) -> AskResponse:
 
 
 @app.post("/ask/compare")
-def ask_compare(payload: CompareRequest) -> dict:
+def ask_compare(payload: CompareRequest, request: Request) -> dict:
+    require_roles(request, {"editor", "admin"})
     models = [m.strip() for m in payload.models if m.strip()]
     if len(models) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two models for comparison.")
@@ -1531,12 +1742,14 @@ def ask_compare(payload: CompareRequest) -> dict:
 
 
 @app.get("/tickets/open")
-def tickets_open() -> dict:
+def tickets_open(request: Request) -> dict:
+    require_roles(request, {"editor", "admin"})
     return {"tickets": db.open_tickets()}
 
 
 @app.post("/editor/respond")
-def editor_respond(payload: EditorResponseRequest) -> dict:
+def editor_respond(payload: EditorResponseRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     open_ids = {t["id"] for t in db.open_tickets()}
     if payload.ticket_id not in open_ids:
         raise HTTPException(status_code=404, detail="Open ticket not found")
@@ -1552,26 +1765,47 @@ def editor_respond(payload: EditorResponseRequest) -> dict:
         embedding=vec,
     )
 
-    return {"status": "resolved_and_indexed", "ticket_id": payload.ticket_id}
+    result = {"status": "resolved_and_indexed", "ticket_id": payload.ticket_id}
+    audit_event(
+        request,
+        ctx,
+        action="resolve_ticket",
+        target_type="ticket",
+        target_id=str(payload.ticket_id),
+        details={"source_label": payload.source_label},
+    )
+    return result
 
 
 @app.post("/tickets/dismiss")
-def tickets_dismiss(payload: TicketDismissRequest) -> dict:
+def tickets_dismiss(payload: TicketDismissRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     open_ids = {t["id"] for t in db.open_tickets()}
     if payload.ticket_id not in open_ids:
         raise HTTPException(status_code=404, detail="Open ticket not found")
     db.dismiss_ticket(payload.ticket_id, payload.reason)
-    return {"status": "dismissed", "ticket_id": payload.ticket_id}
+    result = {"status": "dismissed", "ticket_id": payload.ticket_id}
+    audit_event(
+        request,
+        ctx,
+        action="dismiss_ticket",
+        target_type="ticket",
+        target_id=str(payload.ticket_id),
+        details={"reason": payload.reason},
+    )
+    return result
 
 
 @app.get("/qa/documents")
-def qa_documents(limit: int = 5000) -> dict:
+def qa_documents(request: Request, limit: int = 5000) -> dict:
+    require_roles(request, {"editor", "admin"})
     rows = db.list_qa_documents(limit=limit)
     return {"count": len(rows), "documents": rows}
 
 
 @app.get("/qa/exports")
-def qa_exports() -> dict:
+def qa_exports(request: Request) -> dict:
+    require_roles(request, {"editor", "admin"})
     settings.exports_path.mkdir(parents=True, exist_ok=True)
     rows = []
     for p in sorted(settings.exports_path.glob("qa-export-*"), reverse=True):
@@ -1589,7 +1823,8 @@ def qa_exports() -> dict:
 
 
 @app.post("/qa/export")
-def qa_export(payload: QAExportRequest) -> dict:
+def qa_export(payload: QAExportRequest, request: Request) -> dict:
+    ctx = require_roles(request, {"editor", "admin"})
     rows = db.list_qa_documents(limit=payload.limit)
     settings.exports_path.mkdir(parents=True, exist_ok=True)
     fmt = payload.format.lower().strip()
@@ -1607,17 +1842,27 @@ def qa_export(payload: QAExportRequest) -> dict:
     else:
         raise HTTPException(status_code=400, detail="Unsupported export format")
 
-    return {
+    result = {
         "status": "ok",
         "format": fmt,
         "count": len(rows),
         "path": str(out_path),
         "download_url": f"/qa/export/{filename}",
     }
+    audit_event(
+        request,
+        ctx,
+        action="export_qa_documents",
+        target_type="qa_export",
+        target_id=filename,
+        details={"format": fmt, "count": len(rows), "path": str(out_path)},
+    )
+    return result
 
 
 @app.get("/qa/export/{filename}")
-def qa_export_download(filename: str) -> FileResponse:
+def qa_export_download(filename: str, request: Request) -> FileResponse:
+    require_roles(request, {"editor", "admin"})
     safe_name = Path(filename).name
     if safe_name != filename or not safe_name.startswith("qa-export-"):
         raise HTTPException(status_code=400, detail="Invalid export filename")

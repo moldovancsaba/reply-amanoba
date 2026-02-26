@@ -27,6 +27,10 @@ class Settings:
     chat_api_token = os.getenv("CHAT_API_TOKEN", "").strip()
     chat_allowed_origins = [x.strip() for x in os.getenv("CHAT_ALLOWED_ORIGINS", "*").split(",") if x.strip()]
     chat_rate_limit_per_min = int(os.getenv("CHAT_RATE_LIMIT_PER_MIN", "60"))
+    auth_enabled = os.getenv("AUTH_ENABLED", "0") == "1"
+    admin_api_token = os.getenv("ADMIN_API_TOKEN", "").strip()
+    editor_api_token = os.getenv("EDITOR_API_TOKEN", "").strip()
+    employee_api_token = os.getenv("EMPLOYEE_API_TOKEN", "").strip()
 
     db_path = Path(os.getenv("DB_PATH", "./helpbot.sqlite3")).resolve()
     docs_path = Path(os.getenv("DOCS_PATH", "./data/docs")).resolve()

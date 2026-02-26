@@ -21,7 +21,12 @@
 - `GET /admin/webchat/snippet`
 - token auth + CORS + per-IP rate limit
 
-3. Q/A document archival + export:
+3. Server-side RBAC + immutable audit:
+- role-token enforcement for protected backend endpoints (`employee`/`editor`/`admin`)
+- append-only `audit_events` table with DB triggers blocking update/delete
+- admin audit endpoint: `GET /admin/audit`
+
+4. Q/A document archival + export:
 - `log_interaction` now also writes to `qa_documents`
 - export endpoints:
   - `GET /qa/documents`
@@ -30,22 +35,25 @@
   - `GET /qa/export/{filename}`
 - exports folder: `EXPORTS_PATH` (`./data/exports` default)
 
-4. UI updates (Admin):
+5. UI updates:
 - Q/A export controls + export list
 - webchat snippet viewer/copy
-- no full-page reload for these actions
+- global actor/token fields to satisfy RBAC without page reload
 
-5. Embeddable widget:
+6. Embeddable widget:
 - `app/web/webchat.js`
 - injected via snippet and uses chat API
 
 ## Updated Config/Dependencies
-- `.env.example` extended with docs/export/chat/language settings
+- `.env.example` extended with docs/export/chat/language/auth settings
 - `requirements.txt` added:
   - `PyYAML==6.0.3`
   - `reportlab==4.2.5`
-- `VERSION` file added (`0.1.0`)
+  - `pytest==8.3.4`
+  - `httpx==0.27.2`
+- `VERSION` file set to `0.2.0`
 - `.gitignore` now ignores `data/exports/`
+- GitHub Actions CI: `.github/workflows/ci.yml`
 
 ## Validation Performed
 - Python compile checks passed:
@@ -58,6 +66,10 @@
   - chat session create/history
   - Q/A export generation
   - chat message path
+- Pytest suite added for:
+  - RBAC/audit immutability
+  - chat + export flow
+  - replyctl lifecycle
 
 ## Main Files Changed
 - `app/main.py`
@@ -75,8 +87,7 @@
 - `VERSION` (new)
 
 ## Known Next Steps
-1. Add server-side RBAC (currently token-based chat auth only).
-2. Add immutable audit trail for admin/editor critical actions.
-3. Add CI tests for chat/export/replyctl lifecycle flows.
-4. Extend dependency adapters beyond local Homebrew paths.
-5. Add import/export contract tests for `qa-export-*` files.
+1. Extend dependency adapters beyond local Homebrew paths.
+2. Add stronger token/session management (rotation and expiration).
+3. Add API contract tests for remaining admin/editor endpoints.
+4. Add signed/hashed audit export bundles for tamper-evidence off-host.

@@ -1,3 +1,6 @@
+import os
+import re
+
 import requests
 
 
@@ -7,6 +10,15 @@ class OllamaLLM:
         self.model = model
 
     def answer_with_context(self, question: str, context_blocks: list[str], model: str | None = None) -> str:
+        if os.getenv("LLM_FAKE", "0") == "1":
+            citation = "[doc:local#0]"
+            for block in context_blocks:
+                m = re.search(r"\[(doc:[^\]]+)\]", block)
+                if m:
+                    citation = f"[{m.group(1)}]"
+                    break
+            return f"Test answer for: {question} {citation}"
+
         context = "\n\n".join(context_blocks)
 
         prompt = f"""

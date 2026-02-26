@@ -63,6 +63,29 @@ class Database:
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                occurred_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                details TEXT NOT NULL
+            );
+
+            CREATE TRIGGER IF NOT EXISTS audit_events_no_update
+            BEFORE UPDATE ON audit_events
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_events is immutable');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
+            BEFORE DELETE ON audit_events
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_events is immutable');
+            END;
+
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_key TEXT NOT NULL UNIQUE,
@@ -494,4 +517,49 @@ class Database:
                 row["citations"] = json.loads(row.get("citations") or "[]")
             except Exception:
                 row["citations"] = []
+        return rows
+
+    def log_audit(
+        self,
+        actor: str,
+        role: str,
+        action: str,
+        target_type: str,
+        target_id: str,
+        details: dict[str, Any] | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """
+            INSERT INTO audit_events(occurred_at, actor, role, action, target_type, target_id, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                self._now(),
+                actor or "unknown",
+                role or "unknown",
+                action,
+                target_type,
+                target_id,
+                json.dumps(details or {}, ensure_ascii=False),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def recent_audit_events(self, limit: int = 200) -> list[dict[str, Any]]:
+        cur = self.conn.execute(
+            """
+            SELECT id, occurred_at, actor, role, action, target_type, target_id, details
+            FROM audit_events
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        for row in rows:
+            try:
+                row["details"] = json.loads(row.get("details") or "{}")
+            except Exception:
+                row["details"] = {}
         return rows

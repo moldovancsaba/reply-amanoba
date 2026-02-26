@@ -12,7 +12,7 @@ It supports:
 - multi-instance lifecycle with `replyctl` (install/start/stop/update/backup)
 
 ## Current Version
-- `VERSION`: `0.1.0`
+- `VERSION`: `0.2.0`
 
 ## Quick Start (Current Project)
 ```bash
@@ -153,6 +153,25 @@ Key runtime vars:
 - `STRICT_CITATION_GATE`, `CONFIDENCE_THRESHOLD`
 - `LANGUAGE_PRIMARY`, `LANGUAGE_ALLOWED`
 - `CHAT_ENABLED`, `CHAT_API_TOKEN`, `CHAT_ALLOWED_ORIGINS`, `CHAT_RATE_LIMIT_PER_MIN`
+- `AUTH_ENABLED`, `ADMIN_API_TOKEN`, `EDITOR_API_TOKEN`, `EMPLOYEE_API_TOKEN`
+
+## Server-Side RBAC
+When `AUTH_ENABLED=1` and role tokens are configured, backend endpoints enforce role checks:
+- `admin`: settings, dashboard, language policy, model switching, audit
+- `editor`: upload, ticket handling, enrichment flows, Q/A exports
+- `employee`: ask endpoint access
+
+Auth headers:
+- `Authorization: Bearer <role-token>` or `X-API-Token: <role-token>`
+- optional actor identity for audit: `X-Actor: <user-id>`
+
+## Immutable Audit Log
+Critical write operations append to `audit_events` in SQLite.
+
+Properties:
+- append-only event model
+- DB triggers block `UPDATE` and `DELETE` on `audit_events`
+- admin read endpoint: `GET /admin/audit?limit=200`
 
 ## Core API Surface
 - `GET /health`
@@ -172,6 +191,7 @@ Key runtime vars:
 - `GET /models`
 - `POST /models/select`
 - `GET /admin/public-url`
+- `GET /admin/audit`
 - `GET /admin/language-policy`
 - `POST /admin/language-policy`
 - `GET /admin/webchat/snippet`
@@ -189,3 +209,12 @@ Key runtime vars:
 - Offline-first and open-source runtime (`Ollama` + local embeddings).
 - Escalate over hallucinate (confidence + citation gates).
 - Editor answers are re-annotated into retrieval index.
+
+## CI Gates
+GitHub Actions workflow:
+- `.github/workflows/ci.yml`
+
+Runs on every push and pull request:
+1. dependency install
+2. compile checks (`py_compile`)
+3. pytest suite (RBAC/audit + chat/export + replyctl lifecycle)
