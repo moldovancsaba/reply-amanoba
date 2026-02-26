@@ -1,62 +1,163 @@
-# {reply} - Internal Help Bot
+# {reply} - Local-First Corporate Help Bot
 
-Local-first, grounded enterprise help bot with editor-in-the-loop escalation.
+`{reply}` is an offline-first, citation-gated help bot for internal company knowledge.
 
-## What This System Does
-- Answers employee questions using only annotated internal documentation.
-- Refuses low-confidence / unsupported answers and escalates to editor tickets.
-- Lets editors resolve tickets and enrich knowledge through clarifications.
-- Re-indexes approved editor answers so future answers improve.
-- Runs locally with open-source models via Ollama.
+It supports:
+- employee Q/A from uploaded docs (`.pdf`, `.md`, `.txt`)
+- strict escalation when confidence/citations are not enough
+- editor-in-the-loop ticket resolution and annotation
+- admin dashboard (model health, indexing, operations)
+- embeddable webchat API/module for corporate intranets
+- export of all Q/A records as `jsonl`, `csv`, `md`, `pdf`
+- multi-instance lifecycle with `replyctl` (install/start/stop/update/backup)
 
-## Core Principles
-- Grounded answering from retrieved context only.
-- Citation-first responses where possible.
-- Escalate instead of hallucinate.
-- Human-approved knowledge continuously feeds back into RAG.
+## Current Version
+- `VERSION`: `0.1.0`
 
-## Current Stack
-- Backend: FastAPI
-- Storage: SQLite (`helpbot.sqlite3`)
-- LLM runtime: Ollama
-- Default LLM: `qwen2.5:3b`
-- Embeddings: `intfloat/multilingual-e5-small`
-- Frontend: server-rendered static HTML + global CSS (`/static/styles.css`)
+## Quick Start (Current Project)
+```bash
+cd /Users/moldovancsaba/Projects/reply-amanoba
+./start_helpbot.command
+```
 
-## Main Capabilities Implemented
-- Drag-and-drop and file upload (`.pdf`, `.md`, `.txt`)
-- Reindex pipeline from uploaded docs
-- Strict RAG answer path with escalation
-- Open ticket queue
-- Editor answer + annotation flow
-- Ticket dismiss/delete flow
-- Clarification question generation (`Improve Me`)
-- Clarification answer annotation back into KB
-- Persona-separated UI:
-  - Employee: ask only
-  - Editor: upload + improve + ticket handling
-  - Admin: models + dashboard + compare + public URL
-- Model management:
-  - list installed local models
-  - select active model
-  - compare models on same question
-  - automatic fallback model switch on failures
-- Dashboard:
-  - annotation status
-  - doc/chunk counters
-  - ticket/enrichment/answer-rate metrics
-  - Ollama reachability + active model
-- Public tunnel URL surfaced in Admin panel
+## Manual Run
+```bash
+cd /Users/moldovancsaba/Projects/reply-amanoba
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-## API Endpoints (Current)
+## Multi-Company Install/Update (`replyctl`)
+Main script:
+- `tools/scripts/replyctl`
+
+Example manifest:
+- `deploy/company.yaml.example`
+
+Install dependencies + instance:
+```bash
+cd /Users/moldovancsaba/Projects/reply-amanoba
+tools/scripts/replyctl install --manifest deploy/company.yaml.example --with-deps
+```
+
+Start instance:
+```bash
+tools/scripts/replyctl start example-corp
+```
+
+Start with public tunnel (if enabled in manifest):
+```bash
+tools/scripts/replyctl start example-corp --public
+```
+
+Status:
+```bash
+tools/scripts/replyctl status example-corp
+```
+
+Backup:
+```bash
+tools/scripts/replyctl backup example-corp
+```
+
+Update one instance:
+```bash
+tools/scripts/replyctl update example-corp
+```
+
+Update all instances:
+```bash
+tools/scripts/replyctl update --all
+```
+
+Stop:
+```bash
+tools/scripts/replyctl stop example-corp
+```
+
+Uninstall:
+```bash
+tools/scripts/replyctl uninstall example-corp --yes
+```
+
+Dependency checks:
+```bash
+tools/scripts/replyctl doctor
+tools/scripts/replyctl deps-verify
+tools/scripts/replyctl deps-install
+tools/scripts/replyctl deps-upgrade
+```
+
+## Webchat API (Embed on Internal Website)
+Endpoints:
+- `POST /chat/session`
+- `POST /chat/message`
+- `POST /chat/stream`
+- `POST /chat/history`
+- `GET /chat/config`
+- `GET /admin/webchat/snippet`
+
+Auth:
+- If `CHAT_API_TOKEN` is set, send:
+  - `Authorization: Bearer <token>` or `X-API-Token: <token>`
+
+CORS:
+- Controlled by `CHAT_ALLOWED_ORIGINS`.
+
+Rate limit:
+- Controlled by `CHAT_RATE_LIMIT_PER_MIN`.
+
+### Minimal Embed
+Use Admin tool output (`/admin/webchat/snippet`) or this template:
+```html
+<script>
+  window.REPLY_WEBCHAT_CONFIG = {
+    baseUrl: "https://YOUR-URL",
+    token: "YOUR_CHAT_TOKEN",
+    userId: "employee-1"
+  };
+  const s = document.createElement("script");
+  s.src = window.REPLY_WEBCHAT_CONFIG.baseUrl + "/static/webchat.js";
+  document.head.appendChild(s);
+</script>
+```
+
+## Q/A Archive and Export
+All `ask`/`webchat`/`enrichment escalation` interactions are stored in `qa_documents`.
+
+Endpoints:
+- `GET /qa/documents`
+- `GET /qa/exports`
+- `POST /qa/export`
+- `GET /qa/export/{filename}`
+
+Formats:
+- `jsonl`
+- `csv`
+- `md`
+- `pdf` (requires `reportlab`, already in `requirements.txt`)
+
+Storage:
+- `EXPORTS_PATH` (default: `./data/exports`)
+
+## Environment Variables
+See `.env.example` for full list.
+
+Key runtime vars:
+- `OLLAMA_URL`, `OLLAMA_MODEL`, `EMBED_MODEL`
+- `DOCS_PATH`, `DB_PATH`
+- `EXPORTS_PATH`
+- `STRICT_CITATION_GATE`, `CONFIDENCE_THRESHOLD`
+- `LANGUAGE_PRIMARY`, `LANGUAGE_ALLOWED`
+- `CHAT_ENABLED`, `CHAT_API_TOKEN`, `CHAT_ALLOWED_ORIGINS`, `CHAT_RATE_LIMIT_PER_MIN`
+
+## Core API Surface
 - `GET /health`
-- `GET /`
-- `POST /ingest/reindex`
-- `GET /dashboard/health`
-- `GET /models`
-- `POST /models/select`
-- `GET /admin/public-url`
 - `POST /upload`
+- `POST /ingest/reindex`
 - `POST /ask`
 - `POST /ask/compare`
 - `GET /tickets/open`
@@ -66,70 +167,25 @@ Local-first, grounded enterprise help bot with editor-in-the-loop escalation.
 - `GET /enrichment/open`
 - `GET /enrichment/improve-me`
 - `POST /enrichment/answer`
+- `POST /enrichment/escalate`
+- `GET /dashboard/health`
+- `GET /models`
+- `POST /models/select`
+- `GET /admin/public-url`
+- `GET /admin/language-policy`
+- `POST /admin/language-policy`
+- `GET /admin/webchat/snippet`
+- `POST /chat/session`
+- `POST /chat/message`
+- `POST /chat/stream`
+- `POST /chat/history`
+- `GET /chat/config`
+- `GET /qa/documents`
+- `GET /qa/exports`
+- `POST /qa/export`
+- `GET /qa/export/{filename}`
 
-## Data Model (SQLite)
-- `docs`: indexed chunks + embeddings
-- `tickets`: open/resolved/dismissed escalations + editor answer
-- `interactions`: answered/escalated history
-- `enrichment_questions`: clarification queue + approved answers
-
-## Run (Non-Developer)
-Use launcher:
-- `/Users/moldovancsaba/Projects/reply-amanoba/start_helpbot.command`
-
-What it does:
-- creates/uses `.venv`
-- installs requirements
-- ensures model availability
-- starts local server
-- starts Cloudflare tunnel
-- opens local + public URLs
-
-## Manual Run
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-ollama pull qwen2.5:3b
-ollama serve
-uvicorn app.main:app --reload
-```
-
-## Frontend Notes
-- UI title changed to `{reply}`.
-- Styles are centralized in `app/web/styles.css`.
-- Static assets served from `/static`.
-- Persona view is client-side role filtering.
-
-## Current Known Issues / Risks
-- In `app/main.py`:
-  - duplicated `timeout=120` in one `requests.post(...)` call
-  - duplicated `created += added` in enrichment generation path
-- Authentication/authorization is not implemented (MVP only).
-- Public tunnel is convenient for testing but not production-safe by default.
-
-## Security / Production Gaps (Not Yet Implemented)
-- Authn/Authz (role-enforced server-side, not only UI)
-- Audit logs and immutable action trail
-- Rate limiting and abuse protection
-- Data retention policy and PII controls
-- Background job queue for heavy indexing/enrichment
-
-## Repo Layout
-- `app/main.py` - API, orchestration, routing
-- `app/db.py` - SQLite access layer
-- `app/rag.py` - retrieval/indexing pipeline
-- `app/llm.py` - Ollama integration
-- `app/embeddings.py` - embedding model wrapper
-- `app/schemas.py` - request/response models
-- `app/web/index.html` - UI markup + behavior
-- `app/web/styles.css` - global design system
-- `start_helpbot.command` - unified local+public launcher
-- `start_helpbot_public.command` - public launcher helper
-
-## Operational Guidance
-- Reindex after embedding-model change.
-- Keep docs in `data/docs` or upload through UI.
-- Prefer editor resolution over forcing low-confidence answers.
-- Stop public tunnel when not needed.
+## Notes
+- Offline-first and open-source runtime (`Ollama` + local embeddings).
+- Escalate over hallucinate (confidence + citation gates).
+- Editor answers are re-annotated into retrieval index.

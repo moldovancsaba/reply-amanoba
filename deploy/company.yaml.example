@@ -1,0 +1,29 @@
+schema_version: "1"
+
+company:
+  name: "Example Corp"
+  slug: "example-corp"
+
+language:
+  primary: "en"
+  allowed:
+    - "en"
+
+runtime:
+  host: "127.0.0.1"
+  port: 8010
+
+models:
+  ollama_url: "http://127.0.0.1:11434"
+  ollama_model: "qwen2.5:3b"
+  embed_model: "intfloat/multilingual-e5-small"
+
+integrations:
+  public_tunnel:
+    enabled: false
+    provider: "cloudflared"
+  webchat:
+    enabled: true
+    allowed_origins:
+      - "https://intranet.example.com"
+    rate_limit_per_minute: 90

@@ -59,11 +59,11 @@
       <div class="row">
         <textarea class="field field-textarea" id="improveAnswer" placeholder=""></textarea>
       </div>
-      <div id="openTicketsStatus" class="note"></div>
-      <div id="openTicketActions" class="ticket-list"></div>
       <div class="row">
         <button type="button" id="submitImproveAnswerBtn" class="btn">Submit Answer + Annotate</button>
       </div>
+      <div id="openTicketsStatus" class="note"></div>
+      <div id="openTicketActions" class="ticket-list"></div>
       <div id="improveStatus" class="note"></div>
     </div>
 
@@ -77,7 +77,6 @@
       </div>
       <div class="row">
         <button type="button" id="askBtn" class="btn">Ask Bot</button>
-        <button type="button" id="ticketsBtn" class="btn btn-secondary">Show Open Tickets</button>
       </div>
       <div id="output"></div>
     </div>
@@ -85,6 +84,12 @@
     <div class="card" data-roles="admin">
       <h2>Admin Tools</h2>
       <p class="note">Advanced diagnostics and model comparison tools.</p>
+      <div class="row">
+        <select class="field" id="primaryLanguageSelect"></select>
+        <select class="field" id="allowedLanguagesSelect" multiple size="4"></select>
+        <button type="button" id="saveLanguagePolicyBtn" class="btn btn-secondary">Save Language Policy</button>
+      </div>
+      <div id="languagePolicyStatus" class="note"></div>
       <div class="row">
         <input class="field" id="publicUrlField" type="text" readonly placeholder="Public URL will appear here" />
         <button type="button" id="copyPublicUrlBtn" class="btn btn-secondary">Copy Public URL</button>
@@ -95,6 +100,23 @@
         <input class="field" id="compareModels" type="text" placeholder="Compare models (comma-separated), e.g. qwen2.5:3b,llama3.2:3b" />
         <button type="button" id="compareBtn" class="btn btn-secondary">Compare Models</button>
       </div>
+      <div class="row">
+        <select class="field" id="qaExportFormat">
+          <option value="jsonl">Export JSONL</option>
+          <option value="csv">Export CSV</option>
+          <option value="md">Export Markdown</option>
+          <option value="pdf">Export PDF</option>
+        </select>
+        <button type="button" id="qaExportBtn" class="btn btn-secondary">Export Q/A</button>
+        <button type="button" id="qaExportsRefreshBtn" class="btn btn-secondary">Refresh Exports</button>
+      </div>
+      <div id="qaExportStatus" class="note"></div>
+      <div id="qaExportList" class="ticket-list"></div>
+      <div class="row">
+        <textarea class="field field-textarea" id="webchatSnippetField" readonly></textarea>
+        <button type="button" id="copyWebchatSnippetBtn" class="btn btn-secondary">Copy Webchat Snippet</button>
+      </div>
+      <div id="webchatSnippetStatus" class="note"></div>
     </div>
 
     <div class="card" data-roles="editor">
@@ -117,7 +139,6 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const uploadStatus = document.getElementById('uploadStatus');
     const askBtn = document.getElementById('askBtn');
-    const ticketsBtn = document.getElementById('ticketsBtn');
     const output = document.getElementById('output');
     const refreshDashboardBtn = document.getElementById('refreshDashboardBtn');
     const dashboardMetrics = document.getElementById('dashboardMetrics');
@@ -133,6 +154,18 @@
     const copyPublicUrlBtn = document.getElementById('copyPublicUrlBtn');
     const refreshPublicUrlBtn = document.getElementById('refreshPublicUrlBtn');
     const publicUrlStatus = document.getElementById('publicUrlStatus');
+    const qaExportFormat = document.getElementById('qaExportFormat');
+    const qaExportBtn = document.getElementById('qaExportBtn');
+    const qaExportsRefreshBtn = document.getElementById('qaExportsRefreshBtn');
+    const qaExportStatus = document.getElementById('qaExportStatus');
+    const qaExportList = document.getElementById('qaExportList');
+    const webchatSnippetField = document.getElementById('webchatSnippetField');
+    const copyWebchatSnippetBtn = document.getElementById('copyWebchatSnippetBtn');
+    const webchatSnippetStatus = document.getElementById('webchatSnippetStatus');
+    const primaryLanguageSelect = document.getElementById('primaryLanguageSelect');
+    const allowedLanguagesSelect = document.getElementById('allowedLanguagesSelect');
+    const saveLanguagePolicyBtn = document.getElementById('saveLanguagePolicyBtn');
+    const languagePolicyStatus = document.getElementById('languagePolicyStatus');
     const questionBox = document.getElementById('question');
     const refreshOpenTicketsBtn = document.getElementById('refreshOpenTicketsBtn');
     const openTicketsStatus = document.getElementById('openTicketsStatus');
@@ -192,6 +225,9 @@
       localStorage.setItem('helpbot_persona', persona);
       if (persona === 'admin') {
         loadPublicUrl();
+        loadLanguagePolicy();
+        loadQaExports();
+        loadWebchatSnippet();
       }
     }
 
@@ -286,7 +322,8 @@
 
         if (data.status === 'answered') {
           const cites = data.citations?.length ? `\n\nCitations:\n- ${data.citations.join('\n- ')}` : '';
-          setOutput(`${data.answer}${cites}`, 'ok');
+          const conf = typeof data.confidence === 'number' ? `\n\nConfidence: ${(data.confidence * 100).toFixed(1)}%` : '';
+          setOutput(`${data.answer}${cites}${conf}`, 'ok');
           if (data.active_model) {
             modelStatus.textContent = `Active model: ${data.active_model}`;
           }
@@ -359,27 +396,6 @@
       }
     });
 
-    ticketsBtn.addEventListener('click', async () => {
-      setOutput('Loading open tickets...');
-      try {
-        const res = await fetch('/tickets/open');
-        const data = await parseJsonSafe(res);
-        if (!res.ok) {
-          setOutput(`Could not load tickets: ${data.detail || data.raw || 'unknown error'}`, 'warn');
-          return;
-        }
-        const tickets = data.tickets || [];
-        if (!tickets.length) {
-          setOutput('No open tickets.', 'ok');
-          return;
-        }
-        const lines = tickets.map(t => `#${t.id} | ${t.user_id} | ${t.question}`);
-        setOutput(`Open tickets:\n${lines.join('\n')}`);
-      } catch (err) {
-        setOutput(`Could not load tickets: ${err}`, 'warn');
-      }
-    });
-
     function renderMetric(label, value) {
       const div = document.createElement('div');
       div.className = 'metric';
@@ -423,7 +439,8 @@
         dashboardMetrics.appendChild(renderMetric('Answer Rate', `${ops.answer_rate_percent ?? 0}%`));
 
         const lastIndexed = annotation.last_indexed_at || 'n/a';
-        dashboardMeta.textContent = `Docs folder: ${annotation.docs_folder || 'n/a'} | Last indexed: ${lastIndexed} | Embed model: ${system.embedding_model || 'n/a'}`;
+        const langAllowed = (system.language_allowed || []).join(', ') || 'n/a';
+        dashboardMeta.textContent = `Docs folder: ${annotation.docs_folder || 'n/a'} | Last indexed: ${lastIndexed} | Embed model: ${system.embedding_model || 'n/a'} | Citation gate: ${system.strict_citation_gate ? 'on' : 'off'} | Confidence threshold: ${system.confidence_threshold ?? 'n/a'} | Hybrid weight: ${system.hybrid_vector_weight ?? 'n/a'} | Language policy: primary=${system.language_primary || 'n/a'}, allowed=${langAllowed}`;
 
         const rows = annotation.document_status || [];
         if (!rows.length) {
@@ -600,25 +617,25 @@
       }
     }
 
-    async function loadImproveMe() {
+    async function loadImproveMe(forceFresh = false) {
       improveStatus.textContent = 'Loading next clarification question...';
       currentImproveQuestion = null;
       try {
-        const res = await fetch('/enrichment/improve-me');
+        const url = forceFresh ? `/enrichment/improve-me?t=${Date.now()}` : '/enrichment/improve-me';
+        const res = await fetch(url, { cache: 'no-store' });
         const data = await parseJsonSafe(res);
         if (!res.ok) {
           improveStatus.textContent = `Could not load clarification question: ${data.detail || data.raw || 'unknown error'}`;
-          return;
+          return false;
         }
         if (data.status === 'empty' || !data.question) {
           const auto = data.auto_generated ?? 0;
-          if (!currentAnswerTarget) {
-            activeEditorQuestion.textContent = '';
-          }
+          currentAnswerTarget = null;
+          activeEditorQuestion.textContent = '';
           improveStatus.textContent = auto > 0
             ? `Generated ${auto} new clarification questions, but none could be loaded. Try again.`
             : 'No open clarification questions right now.';
-          return;
+          return false;
         }
         currentImproveQuestion = data.question;
         currentAnswerTarget = { type: 'clarification', id: data.question.id, question: data.question.question };
@@ -627,8 +644,10 @@
         improveStatus.textContent = auto > 0
           ? `Auto-generated ${auto} new clarification questions from tickets/context.`
           : 'Answer this and submit to improve the bot.';
+        return true;
       } catch (err) {
         improveStatus.textContent = `Could not load clarification question: ${err}`;
+        return false;
       }
     }
 
@@ -647,23 +666,35 @@
           });
           const escData = await parseJsonSafe(escRes);
           if (!escRes.ok) {
-            improveStatus.textContent = `Could not escalate previous question: ${escData.detail || escData.raw || 'unknown error'}`;
-            return;
+            improveStatus.textContent = `Could not escalate previous question, generating new one anyway: ${escData.detail || escData.raw || 'unknown error'}`;
+          } else {
+            currentAnswerTarget = null;
+            currentImproveQuestion = null;
+            activeEditorQuestion.textContent = '';
+            improveAnswer.value = '';
+            await loadOpenTickets();
+            improveStatus.textContent = `Added skipped question to open tickets. Generating a new learning question...`;
           }
-          await loadOpenTickets();
         }
 
         const res = await fetch('/enrichment/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ questions_per_doc: 1, include_ticket_based: true, include_general_knowledge: true })
+          body: JSON.stringify({ questions_per_doc: 3, include_ticket_based: true, include_general_knowledge: true })
         });
         const data = await parseJsonSafe(res);
         if (!res.ok) {
           improveStatus.textContent = `Could not generate question: ${data.detail || data.raw || 'unknown error'}`;
           return;
         }
-        await loadImproveMe();
+        let loaded = false;
+        for (let i = 0; i < 6 && !loaded; i += 1) {
+          await new Promise((r) => setTimeout(r, 200));
+          loaded = await loadImproveMe(true);
+        }
+        if (!loaded) {
+          improveStatus.textContent = 'Could not load a new question yet. Click Teach Me once more.';
+        }
       } catch (err) {
         improveStatus.textContent = `Could not generate question: ${err}`;
       }
@@ -687,6 +718,136 @@
         publicUrlStatus.textContent = 'Public URL ready to share.';
       } catch (err) {
         publicUrlStatus.textContent = `Could not load public URL: ${err}`;
+      }
+    }
+
+    async function loadQaExports() {
+      qaExportStatus.textContent = 'Loading exports...';
+      qaExportList.innerHTML = '';
+      try {
+        const res = await fetch('/qa/exports', { cache: 'no-store' });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          qaExportStatus.textContent = `Could not load exports: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        const exports = data.exports || [];
+        if (!exports.length) {
+          qaExportStatus.textContent = 'No Q/A exports generated yet.';
+          return;
+        }
+        qaExportStatus.textContent = `Available exports: ${exports.length}`;
+        exports.forEach((exp) => {
+          const line = document.createElement('div');
+          line.className = 'ticket-row';
+
+          const txt = document.createElement('div');
+          txt.className = 'ticket-text';
+          txt.textContent = `${exp.filename} (${formatSize(exp.size_bytes || 0)})`;
+
+          const download = document.createElement('button');
+          download.type = 'button';
+          download.className = 'btn btn-secondary';
+          download.textContent = 'Download';
+          download.addEventListener('click', () => {
+            window.open(exp.download_url, '_blank');
+          });
+
+          const copy = document.createElement('button');
+          copy.type = 'button';
+          copy.className = 'btn btn-secondary';
+          copy.textContent = 'Copy URL';
+          copy.addEventListener('click', async () => {
+            const url = window.location.origin + exp.download_url;
+            try {
+              await navigator.clipboard.writeText(url);
+              qaExportStatus.textContent = `Copied: ${exp.filename}`;
+            } catch {
+              qaExportStatus.textContent = 'Copy failed.';
+            }
+          });
+
+          line.appendChild(txt);
+          line.appendChild(download);
+          line.appendChild(copy);
+          qaExportList.appendChild(line);
+        });
+      } catch (err) {
+        qaExportStatus.textContent = `Could not load exports: ${err}`;
+      }
+    }
+
+    async function exportQa() {
+      const format = (qaExportFormat.value || 'jsonl').trim().toLowerCase();
+      qaExportStatus.textContent = `Exporting Q/A as ${format.toUpperCase()}...`;
+      try {
+        const res = await fetch('/qa/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format, limit: 200000 })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          qaExportStatus.textContent = `Export failed: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        qaExportStatus.textContent = `Export complete (${data.count} records): ${data.download_url}`;
+        await loadQaExports();
+      } catch (err) {
+        qaExportStatus.textContent = `Export failed: ${err}`;
+      }
+    }
+
+    async function loadWebchatSnippet() {
+      webchatSnippetStatus.textContent = 'Loading webchat snippet...';
+      webchatSnippetField.value = '';
+      try {
+        const res = await fetch('/admin/webchat/snippet', { cache: 'no-store' });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          webchatSnippetStatus.textContent = `Could not load webchat snippet: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        webchatSnippetField.value = data.snippet || '';
+        webchatSnippetStatus.textContent = data.chat_enabled
+          ? `Webchat ready. Allowed origins: ${(data.allowed_origins || []).join(', ')}`
+          : 'Webchat is disabled in server settings.';
+      } catch (err) {
+        webchatSnippetStatus.textContent = `Could not load webchat snippet: ${err}`;
+      }
+    }
+
+    function renderLanguageOptions(supported, primary, allowed) {
+      primaryLanguageSelect.innerHTML = '';
+      allowedLanguagesSelect.innerHTML = '';
+      (supported || []).forEach((lang) => {
+        const p = document.createElement('option');
+        p.value = lang;
+        p.textContent = lang.toUpperCase();
+        if (lang === primary) p.selected = true;
+        primaryLanguageSelect.appendChild(p);
+
+        const a = document.createElement('option');
+        a.value = lang;
+        a.textContent = lang.toUpperCase();
+        a.selected = (allowed || []).includes(lang);
+        allowedLanguagesSelect.appendChild(a);
+      });
+    }
+
+    async function loadLanguagePolicy() {
+      languagePolicyStatus.textContent = 'Loading language policy...';
+      try {
+        const res = await fetch('/admin/language-policy', { cache: 'no-store' });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          languagePolicyStatus.textContent = `Could not load language policy: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        renderLanguageOptions(data.supported_languages || [], data.primary_language, data.allowed_languages || []);
+        languagePolicyStatus.textContent = `Primary: ${(data.primary_language || '').toUpperCase()} | Allowed: ${(data.allowed_languages || []).map(x => x.toUpperCase()).join(', ')}`;
+      } catch (err) {
+        languagePolicyStatus.textContent = `Could not load language policy: ${err}`;
       }
     }
 
@@ -746,6 +907,42 @@
     refreshOpenTicketsBtn.addEventListener('click', loadOpenTickets);
     improveMeBtn.addEventListener('click', generateAndLoadImproveMe);
     refreshPublicUrlBtn.addEventListener('click', loadPublicUrl);
+    qaExportBtn.addEventListener('click', exportQa);
+    qaExportsRefreshBtn.addEventListener('click', loadQaExports);
+    saveLanguagePolicyBtn.addEventListener('click', async () => {
+      const primary = (primaryLanguageSelect.value || '').trim().toLowerCase();
+      const allowed = Array.from(allowedLanguagesSelect.selectedOptions).map(o => (o.value || '').trim().toLowerCase()).filter(Boolean);
+      if (!primary) {
+        languagePolicyStatus.textContent = 'Please select a primary language.';
+        return;
+      }
+      if (!allowed.length) {
+        languagePolicyStatus.textContent = 'Please select at least one allowed language.';
+        return;
+      }
+      languagePolicyStatus.textContent = 'Saving language policy...';
+      try {
+        const res = await fetch('/admin/language-policy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ primary_language: primary, allowed_languages: allowed })
+        });
+        const data = await parseJsonSafe(res);
+        if (!res.ok) {
+          languagePolicyStatus.textContent = `Could not save language policy: ${data.detail || data.raw || 'unknown error'}`;
+          return;
+        }
+        renderLanguageOptions(
+          ['hu', 'en', 'ro', 'es', 'fr', 'de', 'it', 'pt'],
+          data.primary_language,
+          data.allowed_languages || []
+        );
+        languagePolicyStatus.textContent = `Saved. Primary: ${(data.primary_language || '').toUpperCase()} | Allowed: ${(data.allowed_languages || []).map(x => x.toUpperCase()).join(', ')}`;
+        await loadDashboard();
+      } catch (err) {
+        languagePolicyStatus.textContent = `Could not save language policy: ${err}`;
+      }
+    });
     copyPublicUrlBtn.addEventListener('click', async () => {
       if (!publicUrlField.value) {
         publicUrlStatus.textContent = 'No public URL to copy.';
@@ -758,6 +955,18 @@
         publicUrlStatus.textContent = 'Copy failed. Please copy manually from the field.';
       }
     });
+    copyWebchatSnippetBtn.addEventListener('click', async () => {
+      if (!webchatSnippetField.value) {
+        webchatSnippetStatus.textContent = 'No snippet to copy.';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(webchatSnippetField.value);
+        webchatSnippetStatus.textContent = 'Webchat snippet copied.';
+      } catch {
+        webchatSnippetStatus.textContent = 'Copy failed. Please copy manually.';
+      }
+    });
     personaEmployeeBtn.addEventListener('click', () => applyPersona('employee'));
     personaEditorBtn.addEventListener('click', () => applyPersona('editor'));
     personaAdminBtn.addEventListener('click', () => applyPersona('admin'));
@@ -766,6 +975,9 @@
     loadOpenTickets();
     loadImproveMe();
     loadPublicUrl();
+    loadLanguagePolicy();
+    loadQaExports();
+    loadWebchatSnippet();
     applyPersona(localStorage.getItem('helpbot_persona') || 'employee');
   </script>
 </body>

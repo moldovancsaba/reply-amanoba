@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import math
+from collections import Counter
 import numpy as np
 from pypdf import PdfReader
 
@@ -15,6 +17,8 @@ class RetrievedChunk:
     chunk_index: int
     content: str
     score: float
+    vector_score: float
+    keyword_score: float
 
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str]:
@@ -76,23 +80,81 @@ def reindex_docs(db: Database, embedder: Embedder, docs_path: Path) -> int:
     return count
 
 
-def retrieve(db: Database, embedder: Embedder, question: str, top_k: int) -> list[RetrievedChunk]:
+def tokenize(text: str, min_len: int = 2) -> list[str]:
+    parts = re.findall(r"[A-Za-z0-9_]+", text.lower())
+    return [p for p in parts if len(p) >= min_len]
+
+
+def normalize_scores(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    if hi - lo < 1e-9:
+        if hi <= 0:
+            return [0.0 for _ in values]
+        return [1.0 for _ in values]
+    return [(v - lo) / (hi - lo) for v in values]
+
+
+def retrieve(
+    db: Database,
+    embedder: Embedder,
+    question: str,
+    top_k: int,
+    vector_weight: float = 0.7,
+    keyword_min_token_length: int = 2,
+) -> list[RetrievedChunk]:
+    vector_weight = max(0.0, min(1.0, float(vector_weight)))
     q = np.array(embedder.embed_text(question), dtype=np.float32)
+    q_tokens = tokenize(question, min_len=keyword_min_token_length)
     rows = db.list_doc_chunks()
     if not rows:
         return []
 
-    scored: list[RetrievedChunk] = []
+    n_docs = len(rows)
+    chunk_tf: list[Counter[str]] = []
+    df: Counter[str] = Counter()
+    vector_raw: list[float] = []
+    keyword_raw: list[float] = []
+
+    # Build term statistics once for keyword relevance.
     for row in rows:
+        tf = Counter(tokenize(row["content"], min_len=keyword_min_token_length))
+        chunk_tf.append(tf)
+        for term in tf.keys():
+            df[term] += 1
+
+    for i, row in enumerate(rows):
         emb = np.array(eval_embedding(row["embedding"]), dtype=np.float32)
-        score = float(np.dot(q, emb))
+        vec_score = float(np.dot(q, emb))
+        vector_raw.append(vec_score)
+
+        tf = chunk_tf[i]
+        kw_score = 0.0
+        for term in q_tokens:
+            if term not in tf:
+                continue
+            # Smooth IDF with +1 so frequent terms still contribute minimally.
+            idf = math.log((1.0 + n_docs) / (1.0 + df.get(term, 0))) + 1.0
+            kw_score += float(tf[term]) * idf
+        keyword_raw.append(kw_score)
+
+    vector_norm = normalize_scores(vector_raw)
+    keyword_norm = normalize_scores(keyword_raw)
+
+    scored: list[RetrievedChunk] = []
+    for i, row in enumerate(rows):
+        combined = (vector_weight * vector_norm[i]) + ((1.0 - vector_weight) * keyword_norm[i])
         scored.append(
             RetrievedChunk(
                 doc_id=row["id"],
                 source=row["source"],
                 chunk_index=row["chunk_index"],
                 content=row["content"],
-                score=score,
+                score=float(combined),
+                vector_score=float(vector_norm[i]),
+                keyword_score=float(keyword_norm[i]),
             )
         )
 

@@ -1,11 +1,24 @@
 from pathlib import Path
+import csv
 import json
 import re
+import threading
+import time
+from datetime import datetime, timezone
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, HTTPException, UploadFile, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import requests
+
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
 
 from app.config import settings
 from app.db import Database
@@ -20,11 +33,16 @@ from app.schemas import (
     EditorResponseRequest,
     EnrichmentAnswerRequest,
     EnrichmentGenerateRequest,
+    LanguagePolicyRequest,
     ModelSelectRequest,
+    QAExportRequest,
     TicketDismissRequest,
+    ChatHistoryRequest,
+    ChatMessageRequest,
+    ChatSessionCreateRequest,
 )
 
-app = FastAPI(title="Internal Help Bot")
+app = FastAPI(title="{reply}")
 
 db = Database(settings.db_path)
 embedder = Embedder(settings.embed_model)
@@ -34,8 +52,81 @@ web_path = web_dir / "index.html"
 allowed_upload_exts = {".pdf", ".md", ".txt"}
 active_model = {"name": settings.ollama_model}
 tunnel_log_path = Path("/tmp/helpbot-tunnel.log")
+supported_languages = ["hu", "en", "ro", "es", "fr", "de", "it", "pt"]
+language_markers = {
+    "hu": [" mi ", " vagy ", " és ", " hogy ", " az ", " egy ", "kérdés", "válasz"],
+    "ro": [" și ", " este ", " sunt ", " ce ", " pentru ", " întrebare", "răspuns"],
+    "es": [" el ", " la ", " de ", " que ", " para ", " pregunta", "respuesta"],
+    "fr": [" le ", " la ", " de ", " et ", " pour ", " question", "réponse"],
+    "de": [" der ", " die ", " und ", " für ", " ist ", " frage", "antwort"],
+    "it": [" il ", " la ", " e ", " per ", " che ", " domanda", "risposta"],
+    "pt": [" o ", " a ", " e ", " para ", " que ", " pergunta", "resposta"],
+    "en": [" the ", " and ", " what ", " is ", " are ", " question", "answer"],
+}
 
 app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+
+cors_origins = settings.chat_allowed_origins or ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=False if "*" in cors_origins else True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+chat_rate_window: dict[str, list[float]] = {}
+chat_rate_lock = threading.Lock()
+
+
+def normalize_lang(code: str) -> str:
+    c = (code or "").strip().lower()
+    return c if c in supported_languages else "en"
+
+
+def load_language_policy() -> dict:
+    primary = db.get_setting("language_primary") or settings.language_primary
+    allowed_raw = db.get_setting("language_allowed")
+    if allowed_raw:
+        allowed = [normalize_lang(x) for x in allowed_raw.split(",") if x.strip()]
+    else:
+        allowed = [normalize_lang(x) for x in settings.language_allowed if x.strip()]
+
+    primary = normalize_lang(primary)
+    allowed = [x for x in allowed if x in supported_languages]
+    if not allowed:
+        allowed = [primary]
+    if primary not in allowed:
+        allowed.insert(0, primary)
+    # Stable unique order.
+    deduped = []
+    seen = set()
+    for x in allowed:
+        if x in seen:
+            continue
+        seen.add(x)
+        deduped.append(x)
+    return {"primary": primary, "allowed": deduped}
+
+
+def save_language_policy(primary: str, allowed: list[str]) -> dict:
+    p = normalize_lang(primary)
+    clean = [normalize_lang(x) for x in allowed if normalize_lang(x) in supported_languages]
+    if p not in clean:
+        clean.insert(0, p)
+    deduped = []
+    seen = set()
+    for x in clean:
+        if x in seen:
+            continue
+        seen.add(x)
+        deduped.append(x)
+    db.set_setting("language_primary", p)
+    db.set_setting("language_allowed", ",".join(deduped))
+    return {"primary": p, "allowed": deduped}
+
+
+language_policy = load_language_policy()
 
 
 def safe_filename(name: str) -> str:
@@ -122,21 +213,241 @@ def current_public_url() -> str | None:
     return matches[-1]
 
 
+def chat_origin_allowed(origin: str | None) -> bool:
+    allowed = settings.chat_allowed_origins or ["*"]
+    if "*" in allowed:
+        return True
+    if not origin:
+        return True
+    return origin in allowed
+
+
+def chat_token_valid(request: Request) -> bool:
+    required = settings.chat_api_token.strip()
+    if not required:
+        return True
+    auth = (request.headers.get("authorization") or "").strip()
+    header_token = (request.headers.get("x-api-token") or "").strip()
+    bearer = ""
+    if auth.lower().startswith("bearer "):
+        bearer = auth[7:].strip()
+    provided = bearer or header_token
+    return bool(provided) and provided == required
+
+
+def check_chat_rate_limit(request: Request) -> None:
+    max_per_min = max(1, int(settings.chat_rate_limit_per_min))
+    now = time.time()
+    ip = request.client.host if request.client else "unknown"
+    with chat_rate_lock:
+        hits = chat_rate_window.get(ip, [])
+        hits = [t for t in hits if now - t < 60.0]
+        if len(hits) >= max_per_min:
+            chat_rate_window[ip] = hits
+            raise HTTPException(status_code=429, detail="Chat rate limit exceeded. Try again in a minute.")
+        hits.append(now)
+        chat_rate_window[ip] = hits
+
+
+def require_chat_access(request: Request, apply_rate_limit: bool = False) -> None:
+    if not settings.chat_enabled:
+        raise HTTPException(status_code=403, detail="Webchat is disabled.")
+    if not chat_token_valid(request):
+        raise HTTPException(status_code=401, detail="Invalid or missing chat API token.")
+    origin = request.headers.get("origin")
+    if not chat_origin_allowed(origin):
+        raise HTTPException(status_code=403, detail="Origin is not allowed for webchat.")
+    if apply_rate_limit:
+        check_chat_rate_limit(request)
+
+
+def export_name(ext: str) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return f"qa-export-{stamp}.{ext}"
+
+
+def write_qa_jsonl(records: list[dict], out_path: Path) -> None:
+    with out_path.open("w", encoding="utf-8") as f:
+        for row in records:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def write_qa_csv(records: list[dict], out_path: Path) -> None:
+    fields = ["id", "user_id", "question", "answer", "status", "citations", "source", "created_at"]
+    with out_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in records:
+            line = dict(row)
+            line["citations"] = ", ".join(line.get("citations") or [])
+            writer.writerow({k: line.get(k) for k in fields})
+
+
+def write_qa_md(records: list[dict], out_path: Path) -> None:
+    lines = ["# Q/A Export", ""]
+    for row in records:
+        lines.append(f"## #{row.get('id')} - {row.get('status', 'n/a')}")
+        lines.append(f"- User: {row.get('user_id', '')}")
+        lines.append(f"- Source: {row.get('source', '')}")
+        lines.append(f"- Time: {row.get('created_at', '')}")
+        citations = row.get("citations") or []
+        lines.append(f"- Citations: {', '.join(citations) if citations else 'none'}")
+        lines.append("")
+        lines.append("### Question")
+        lines.append(str(row.get("question", "")).strip() or "(empty)")
+        lines.append("")
+        lines.append("### Answer")
+        lines.append(str(row.get("answer", "")).strip() or "(none)")
+        lines.append("")
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _wrap_text_to_width(text: str, width: int = 115) -> list[str]:
+    words = re.sub(r"\s+", " ", text).strip().split(" ")
+    if not words or words == [""]:
+        return [""]
+    lines: list[str] = []
+    current = ""
+    for w in words:
+        proposal = f"{current} {w}".strip()
+        if len(proposal) <= width:
+            current = proposal
+            continue
+        if current:
+            lines.append(current)
+        current = w
+    if current:
+        lines.append(current)
+    return lines
+
+
+def write_qa_pdf(records: list[dict], out_path: Path) -> None:
+    if not REPORTLAB_AVAILABLE:
+        raise HTTPException(status_code=500, detail="PDF export requires reportlab. Install dependencies and retry.")
+
+    c = canvas.Canvas(str(out_path), pagesize=A4)
+    width, height = A4
+    x = 40
+    y = height - 40
+    line_height = 14
+
+    def put_line(text: str, bold: bool = False) -> None:
+        nonlocal y
+        c.setFont("Helvetica-Bold" if bold else "Helvetica", 10)
+        c.drawString(x, y, text[:2000])
+        y -= line_height
+        if y < 50:
+            c.showPage()
+            y = height - 40
+
+    put_line("Q/A Export", bold=True)
+    put_line("")
+    for row in records:
+        put_line(f"#{row.get('id')} [{row.get('status', 'n/a')}] {row.get('created_at', '')}", bold=True)
+        put_line(f"User: {row.get('user_id', '')} | Source: {row.get('source', '')}")
+        citations = row.get("citations") or []
+        put_line(f"Citations: {', '.join(citations) if citations else 'none'}")
+        put_line("Question:", bold=True)
+        for ln in _wrap_text_to_width(str(row.get("question", ""))):
+            put_line(ln)
+        put_line("Answer:", bold=True)
+        for ln in _wrap_text_to_width(str(row.get("answer", "")) or "(none)"):
+            put_line(ln)
+        put_line("")
+
+    c.save()
+
+
 def detect_language(text: str) -> str:
     t = f" {text.lower()} "
-    markers = {
-        "hu": [" mi ", " vagy ", " és ", " hogy ", " az ", " egy ", "kérdés", "válasz"],
-        "ro": [" și ", " este ", " sunt ", " ce ", " pentru ", " întrebare", "răspuns"],
-        "es": [" el ", " la ", " de ", " que ", " para ", " pregunta", "respuesta"],
-        "fr": [" le ", " la ", " de ", " et ", " pour ", " question", "réponse"],
-        "de": [" der ", " die ", " und ", " für ", " ist ", " frage", "antwort"],
-        "it": [" il ", " la ", " e ", " per ", " che ", " domanda", "risposta"],
-        "pt": [" o ", " a ", " e ", " para ", " que ", " pergunta", "resposta"],
-    }
-    for lang, words in markers.items():
+    for lang, words in language_markers.items():
         if any(w in t for w in words):
             return lang
     return "en"
+
+
+def language_profile(text: str) -> dict[str, int]:
+    t = f" {text.lower()} "
+    scores: dict[str, int] = {}
+    for lang, words in language_markers.items():
+        score = sum(1 for w in words if w in t)
+        scores[lang] = score
+    return scores
+
+
+def is_mixed_language(text: str) -> bool:
+    scores = language_profile(text)
+    positives = [s for s in scores.values() if s > 0]
+    if len(positives) <= 1:
+        return False
+    top_two = sorted(positives, reverse=True)[:2]
+    # Mixed if at least two languages have meaningful signal.
+    return top_two[1] >= 1
+
+
+def is_language_compliant(text: str, target_lang: str) -> bool:
+    if not text.strip():
+        return False
+    detected = normalize_lang(detect_language(text))
+    mixed = is_mixed_language(text)
+    return detected == normalize_lang(target_lang) and not mixed
+
+
+def translate_to_language(text: str, target_lang: str, model_name: str) -> str:
+    prompt = f"""
+Translate the following text to language code '{target_lang}'.
+Rules:
+- Preserve citations like [doc:...#...]
+- Keep technical terms if needed
+- Return only translated text
+
+TEXT:
+{text}
+""".strip()
+    resp = requests.post(
+        f"{settings.ollama_url.rstrip('/')}/api/generate",
+        json={
+            "model": model_name,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.1},
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    return (resp.json().get("response") or "").strip()
+
+
+def enforce_language_policy(text: str, model_name: str, preferred_lang: str | None = None) -> str:
+    if not text.strip():
+        return text
+    target_lang = normalize_lang(preferred_lang or language_policy["primary"])
+    if target_lang not in language_policy["allowed"]:
+        target_lang = language_policy["primary"]
+    detected = normalize_lang(detect_language(text))
+    mixed = is_mixed_language(text)
+    if detected == target_lang and not mixed:
+        return text
+    try:
+        translated = translate_to_language(text, target_lang, model_name)
+        return translated or text
+    except Exception:
+        return text
+
+
+def normalize_or_none(text: str, model_name: str, target_lang: str) -> str | None:
+    target = normalize_lang(target_lang)
+    if is_language_compliant(text, target):
+        return text
+    try:
+        translated = translate_to_language(text, target, model_name)
+    except Exception:
+        return None
+    if not translated.strip():
+        return None
+    if not is_language_compliant(translated, target):
+        return None
+    return translated
 
 
 def switch_notice(lang: str, old_model: str, new_model: str) -> str:
@@ -151,6 +462,54 @@ def switch_notice(lang: str, old_model: str, new_model: str) -> str:
         "en": f"I switched the active AI agent ({old_model} -> {new_model}) to answer your request.",
     }
     return messages.get(lang, messages["en"])
+
+
+def extract_doc_citations(answer: str) -> set[str]:
+    return set(re.findall(r"\[(doc:[^\]]+)\]", answer or ""))
+
+
+def has_valid_citation(answer: str, allowed_citations: list[str]) -> bool:
+    cited = extract_doc_citations(answer)
+    if not cited:
+        return False
+    allowed = set(allowed_citations)
+    return bool(cited.intersection(allowed))
+
+
+def compute_confidence(hits: list, citation_ok: bool) -> float:
+    if not hits:
+        return 0.0
+    top = max(0.0, min(1.0, float(hits[0].score)))
+    avg = max(0.0, min(1.0, float(sum(h.score for h in hits[:3]) / max(1, len(hits[:3])))))
+    retrieval_conf = (0.7 * top) + (0.3 * avg)
+    citation_conf = 1.0 if citation_ok else 0.0
+    score = (0.8 * retrieval_conf) + (0.2 * citation_conf)
+    return round(max(0.0, min(1.0, score)), 4)
+
+
+def stale_sources(sources: list[str]) -> list[str]:
+    if settings.stale_doc_policy == "off":
+        return []
+    now = datetime.now(timezone.utc)
+    max_age_days = max(0, int(settings.stale_doc_days))
+    stale: list[str] = []
+    seen = set()
+    for source in sources:
+        if source in seen:
+            continue
+        seen.add(source)
+        p = settings.docs_path / source
+        if not p.exists() or not p.is_file():
+            # Knowledge entries that are not physical docs are treated as fresh.
+            continue
+        try:
+            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        except Exception:
+            continue
+        age_days = (now - mtime).days
+        if age_days > max_age_days:
+            stale.append(source)
+    return stale
 
 
 def answer_with_fallback(question: str, context_blocks: list[str], selected_model: str) -> tuple[str, str, str | None]:
@@ -222,7 +581,7 @@ Goal:
 - Ask only high-impact questions where details are missing/ambiguous.
 - Questions should help employees get more precise, policy-safe answers later.
 - Keep questions concise and specific.
-- Use the same language as the document.
+- Use ONLY language code '{language_policy["primary"]}'.
 - Return ONLY a JSON array of strings.
 
 DOCUMENT_SOURCE: {source_doc}
@@ -248,6 +607,9 @@ DOCUMENT:
     deduped: list[str] = []
     seen = set()
     for q in questions:
+        q = normalize_or_none(q, model_name, language_policy["primary"])
+        if not q:
+            continue
         key = q.lower()
         if key in seen:
             continue
@@ -295,6 +657,7 @@ Rules:
 - Questions must be practical and answerable by the editor.
 - Prioritize gaps implied by OPEN_TICKETS.
 - Avoid duplicates and vague wording.
+- Use ONLY language code '{language_policy["primary"]}'.
 - Return ONLY a JSON array of strings.
 
 {knowledge_mode}
@@ -323,6 +686,9 @@ OPEN_TICKETS:
     deduped: list[str] = []
     seen = set()
     for q in items:
+        q = normalize_or_none(q, model_name, language_policy["primary"])
+        if not q:
+            continue
         k = q.lower().strip()
         if not k or k in seen:
             continue
@@ -406,6 +772,13 @@ def dashboard_health() -> dict:
             "api": "ok",
             "embedding_model": settings.embed_model,
             "embedding_loaded": embedder.model is not None,
+            "strict_citation_gate": settings.strict_citation_gate,
+            "confidence_threshold": settings.confidence_threshold,
+            "hybrid_vector_weight": settings.hybrid_vector_weight,
+            "stale_doc_policy": settings.stale_doc_policy,
+            "stale_doc_days": settings.stale_doc_days,
+            "language_primary": language_policy["primary"],
+            "language_allowed": language_policy["allowed"],
             "llm": ollama_health(),
             "active_model": active_model["name"],
         },
@@ -441,6 +814,26 @@ def admin_public_url() -> dict:
     return {"public_url": url}
 
 
+@app.get("/admin/language-policy")
+def admin_language_policy() -> dict:
+    return {
+        "primary_language": language_policy["primary"],
+        "allowed_languages": language_policy["allowed"],
+        "supported_languages": supported_languages,
+    }
+
+
+@app.post("/admin/language-policy")
+def admin_set_language_policy(payload: LanguagePolicyRequest) -> dict:
+    global language_policy
+    language_policy = save_language_policy(payload.primary_language, payload.allowed_languages)
+    return {
+        "status": "ok",
+        "primary_language": language_policy["primary"],
+        "allowed_languages": language_policy["allowed"],
+    }
+
+
 @app.post("/models/select")
 def select_model(payload: ModelSelectRequest) -> dict:
     available = ollama_models()
@@ -448,6 +841,138 @@ def select_model(payload: ModelSelectRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Model not installed. Available: {available}")
     active_model["name"] = payload.model
     return {"status": "ok", "active_model": active_model["name"]}
+
+
+@app.get("/admin/webchat/snippet")
+def admin_webchat_snippet(request: Request) -> dict:
+    base_url = current_public_url() or str(request.base_url).rstrip("/")
+    token_hint = "<CHAT_API_TOKEN>"
+    snippet = (
+        "<script>\n"
+        f"  window.REPLY_WEBCHAT_CONFIG = {{ baseUrl: '{base_url}', token: '{token_hint}', userId: 'employee-1' }};\n"
+        "  const s = document.createElement('script');\n"
+        "  s.src = `${window.REPLY_WEBCHAT_CONFIG.baseUrl}/static/webchat.js`;\n"
+        "  document.head.appendChild(s);\n"
+        "</script>"
+    )
+    return {
+        "status": "ok",
+        "chat_enabled": settings.chat_enabled,
+        "allowed_origins": settings.chat_allowed_origins,
+        "rate_limit_per_min": settings.chat_rate_limit_per_min,
+        "snippet": snippet,
+    }
+
+
+@app.get("/chat/config")
+def chat_config() -> dict:
+    return {
+        "enabled": settings.chat_enabled,
+        "allowed_origins": settings.chat_allowed_origins,
+        "rate_limit_per_min": settings.chat_rate_limit_per_min,
+        "auth_required": bool(settings.chat_api_token.strip()),
+    }
+
+
+@app.post("/chat/session")
+def chat_create_session(payload: ChatSessionCreateRequest, request: Request) -> dict:
+    require_chat_access(request, apply_rate_limit=False)
+    session_id = db.create_chat_session(
+        user_id=payload.user_id,
+        source=payload.source,
+        metadata=payload.metadata,
+    )
+    return {"status": "ok", "session_id": session_id}
+
+
+@app.post("/chat/history")
+def chat_history(payload: ChatHistoryRequest, request: Request) -> dict:
+    require_chat_access(request, apply_rate_limit=False)
+    session = db.get_chat_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    messages = db.chat_history(payload.session_id, limit=payload.limit)
+    return {"status": "ok", "session": session, "messages": messages}
+
+
+@app.post("/chat/message")
+def chat_message(payload: ChatMessageRequest, request: Request) -> dict:
+    require_chat_access(request, apply_rate_limit=True)
+    session = db.get_chat_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    db.append_chat_message(payload.session_id, role="user", content=message, status="received")
+    ask_result = ask(AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"))
+
+    if ask_result.status == "answered":
+        assistant_text = ask_result.answer or ""
+    else:
+        assistant_text = (
+            f"Escalated to editor. Ticket #{ask_result.ticket_id}\n"
+            f"Reason: {ask_result.reason or 'Insufficient context.'}"
+        )
+
+    db.append_chat_message(
+        payload.session_id,
+        role="assistant",
+        content=assistant_text,
+        status=ask_result.status,
+        citations=ask_result.citations,
+    )
+
+    return {
+        "status": "ok",
+        "session_id": payload.session_id,
+        "result": ask_result.model_dump(),
+        "assistant_message": assistant_text,
+    }
+
+
+@app.post("/chat/stream")
+def chat_stream(payload: ChatMessageRequest, request: Request) -> StreamingResponse:
+    require_chat_access(request, apply_rate_limit=True)
+    session = db.get_chat_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    db.append_chat_message(payload.session_id, role="user", content=message, status="received")
+    ask_result = ask(AskRequest(user_id=session["user_id"], question=message, model=payload.model, source="webchat"))
+    assistant_text = ask_result.answer or ""
+    if ask_result.status != "answered":
+        assistant_text = (
+            f"Escalated to editor. Ticket #{ask_result.ticket_id}\n"
+            f"Reason: {ask_result.reason or 'Insufficient context.'}"
+        )
+    db.append_chat_message(
+        payload.session_id,
+        role="assistant",
+        content=assistant_text,
+        status=ask_result.status,
+        citations=ask_result.citations,
+    )
+
+    payload_json = {
+        "status": "ok",
+        "session_id": payload.session_id,
+        "result": ask_result.model_dump(),
+        "assistant_message": assistant_text,
+    }
+
+    def event_stream():
+        yield "event: message\n"
+        yield f"data: {json.dumps(payload_json, ensure_ascii=False)}\n\n"
+        yield "event: done\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.post("/upload")
@@ -531,14 +1056,29 @@ def enrichment_open() -> dict:
 
 @app.get("/enrichment/improve-me")
 def enrichment_improve_me() -> dict:
-    open_questions = db.open_enrichment_questions()
-    if not open_questions:
-        created = ensure_enrichment_backlog(min_open=5, include_general_knowledge=True)
+    def pick_next_compliant() -> dict | None:
         open_questions = db.open_enrichment_questions()
-        if not open_questions:
-            return {"status": "empty", "question": None, "auto_generated": created}
-        return {"status": "ok", "question": open_questions[0], "auto_generated": created}
-    return {"status": "ok", "question": open_questions[0]}
+        target = language_policy["primary"]
+        for q in open_questions:
+            norm = normalize_or_none(q["question"], active_model["name"], target)
+            if norm is None:
+                db.escalate_enrichment_question(q["id"], "Language policy violation: could not normalize question")
+                continue
+            if norm != q["question"]:
+                db.update_enrichment_question_text(q["id"], norm)
+                q["question"] = norm
+            return q
+        return None
+
+    q = pick_next_compliant()
+    if q:
+        return {"status": "ok", "question": q}
+
+    created = ensure_enrichment_backlog(min_open=5, include_general_knowledge=True)
+    q = pick_next_compliant()
+    if not q:
+        return {"status": "empty", "question": None, "auto_generated": created}
+    return {"status": "ok", "question": q, "auto_generated": created}
 
 
 @app.post("/enrichment/answer")
@@ -575,6 +1115,7 @@ def enrichment_escalate(payload: EnrichmentEscalateRequest) -> dict:
         status="escalated",
         citations=[],
         ticket_id=ticket_id,
+        source="enrichment",
     )
     return {
         "status": "escalated_to_ticket",
@@ -585,7 +1126,15 @@ def enrichment_escalate(payload: EnrichmentEscalateRequest) -> dict:
 
 @app.post("/ask", response_model=AskResponse)
 def ask(payload: AskRequest) -> AskResponse:
-    hits = retrieve(db=db, embedder=embedder, question=payload.question, top_k=settings.top_k)
+    source = re.sub(r"[^a-z0-9_-]+", "-", (payload.source or "ask").strip().lower())[:32] or "ask"
+    hits = retrieve(
+        db=db,
+        embedder=embedder,
+        question=payload.question,
+        top_k=settings.top_k,
+        vector_weight=settings.hybrid_vector_weight,
+        keyword_min_token_length=settings.keyword_min_token_length,
+    )
 
     if not hits:
         ticket_id = db.create_ticket(payload.user_id, payload.question)
@@ -596,6 +1145,7 @@ def ask(payload: AskRequest) -> AskResponse:
             status="escalated",
             citations=[],
             ticket_id=ticket_id,
+            source=source,
         )
         return AskResponse(
             status="escalated",
@@ -613,6 +1163,7 @@ def ask(payload: AskRequest) -> AskResponse:
             status="escalated",
             citations=[],
             ticket_id=ticket_id,
+            source=source,
         )
         return AskResponse(
             status="escalated",
@@ -622,9 +1173,11 @@ def ask(payload: AskRequest) -> AskResponse:
 
     context_blocks = []
     citations = []
+    sources = []
     for h in hits:
         cid = f"doc:{h.source}#{h.chunk_index}"
         citations.append(cid)
+        sources.append(h.source)
         context_blocks.append(f"[{cid}] {h.content}")
 
     selected_model = payload.model or active_model["name"]
@@ -641,6 +1194,7 @@ def ask(payload: AskRequest) -> AskResponse:
             status="escalated",
             citations=citations,
             ticket_id=ticket_id,
+            source=source,
         )
         return AskResponse(
             status="escalated",
@@ -658,6 +1212,7 @@ def ask(payload: AskRequest) -> AskResponse:
             status="escalated",
             citations=citations,
             ticket_id=ticket_id,
+            source=source,
         )
         return AskResponse(
             status="escalated",
@@ -676,6 +1231,7 @@ def ask(payload: AskRequest) -> AskResponse:
             status="escalated",
             citations=citations,
             ticket_id=ticket_id,
+            source=source,
         )
         return AskResponse(
             status="escalated",
@@ -685,12 +1241,106 @@ def ask(payload: AskRequest) -> AskResponse:
             switched_from_model=switched_from_model,
         )
 
+    preferred_output_lang = normalize_lang(detect_language(payload.question))
+    if preferred_output_lang not in language_policy["allowed"]:
+        preferred_output_lang = language_policy["primary"]
+    normalized_answer = normalize_or_none(answer, model_used, preferred_output_lang)
+    if normalized_answer is None:
+        ticket_id = db.create_ticket(payload.user_id, payload.question)
+        db.log_interaction(
+            user_id=payload.user_id,
+            question=payload.question,
+            answer=None,
+            status="escalated",
+            citations=citations,
+            ticket_id=ticket_id,
+            source=source,
+        )
+        return AskResponse(
+            status="escalated",
+            ticket_id=ticket_id,
+            reason=f"Language policy enforcement failed (required: {preferred_output_lang}).",
+            active_model=active_model["name"],
+            switched_from_model=switched_from_model,
+        )
+    answer = normalized_answer
+
+    citation_ok = has_valid_citation(answer, citations)
+    confidence = compute_confidence(hits, citation_ok)
+
+    if settings.strict_citation_gate and not citation_ok:
+        ticket_id = db.create_ticket(payload.user_id, payload.question)
+        db.log_interaction(
+            user_id=payload.user_id,
+            question=payload.question,
+            answer=None,
+            status="escalated",
+            citations=citations,
+            ticket_id=ticket_id,
+            source=source,
+        )
+        return AskResponse(
+            status="escalated",
+            ticket_id=ticket_id,
+            reason="Answer lacked explicit citations.",
+            active_model=active_model["name"],
+            switched_from_model=switched_from_model,
+            confidence=confidence,
+        )
+
+    stale = stale_sources(sources)
+    if stale and settings.stale_doc_policy == "escalate":
+        ticket_id = db.create_ticket(payload.user_id, payload.question)
+        db.log_interaction(
+            user_id=payload.user_id,
+            question=payload.question,
+            answer=None,
+            status="escalated",
+            citations=citations,
+            ticket_id=ticket_id,
+            source=source,
+        )
+        return AskResponse(
+            status="escalated",
+            ticket_id=ticket_id,
+            reason=f"Retrieved sources appear outdated (>{settings.stale_doc_days} days): {', '.join(stale[:3])}",
+            active_model=active_model["name"],
+            switched_from_model=switched_from_model,
+            confidence=confidence,
+        )
+
+    if confidence < settings.confidence_threshold:
+        ticket_id = db.create_ticket(payload.user_id, payload.question)
+        db.log_interaction(
+            user_id=payload.user_id,
+            question=payload.question,
+            answer=None,
+            status="escalated",
+            citations=citations,
+            ticket_id=ticket_id,
+            source=source,
+        )
+        return AskResponse(
+            status="escalated",
+            ticket_id=ticket_id,
+            reason=f"Low confidence ({confidence:.2f} < {settings.confidence_threshold:.2f}).",
+            active_model=active_model["name"],
+            switched_from_model=switched_from_model,
+            confidence=confidence,
+        )
+
     if switched_from_model:
         lang = detect_language(payload.question)
         notice = switch_notice(lang, switched_from_model, model_used)
         answer = f"{notice}\n\n{answer}"
 
-    if "[doc:" not in answer and citations:
+    if stale and settings.stale_doc_policy == "warn":
+        answer = (
+            f"{answer}\n\nWarning: some cited sources may be outdated "
+            f"(>{settings.stale_doc_days} days): {', '.join(stale[:3])}"
+        )
+
+    if not settings.strict_citation_gate and "[doc:" not in answer and citations:
         answer = f"{answer}\n\nSources: " + ", ".join(f"[{c}]" for c in citations[:3])
 
     db.log_interaction(
@@ -700,11 +1350,13 @@ def ask(payload: AskRequest) -> AskResponse:
         status="answered",
         citations=citations,
         ticket_id=None,
+        source=source,
     )
     return AskResponse(
         status="answered",
         answer=answer,
         citations=citations,
+        confidence=confidence,
         active_model=active_model["name"],
         switched_from_model=switched_from_model,
     )
@@ -721,7 +1373,14 @@ def ask_compare(payload: CompareRequest) -> dict:
     if missing:
         raise HTTPException(status_code=400, detail=f"These models are not installed: {missing}")
 
-    hits = retrieve(db=db, embedder=embedder, question=payload.question, top_k=settings.top_k)
+    hits = retrieve(
+        db=db,
+        embedder=embedder,
+        question=payload.question,
+        top_k=settings.top_k,
+        vector_weight=settings.hybrid_vector_weight,
+        keyword_min_token_length=settings.keyword_min_token_length,
+    )
     if not hits:
         return {
             "status": "insufficient_context",
@@ -739,10 +1398,13 @@ def ask_compare(payload: CompareRequest) -> dict:
 
     context_blocks = []
     citations = []
+    sources = []
     for h in hits:
         cid = f"doc:{h.source}#{h.chunk_index}"
         citations.append(cid)
+        sources.append(h.source)
         context_blocks.append(f"[{cid}] {h.content}")
+    stale = stale_sources(sources)
 
     results = []
     for model_name in models:
@@ -784,8 +1446,71 @@ def ask_compare(payload: CompareRequest) -> dict:
             )
             continue
 
-        if "[doc:" not in answer and citations:
+        preferred_output_lang = normalize_lang(detect_language(payload.question))
+        if preferred_output_lang not in language_policy["allowed"]:
+            preferred_output_lang = language_policy["primary"]
+        normalized_answer = normalize_or_none(answer, model_name, preferred_output_lang)
+        if normalized_answer is None:
+            results.append(
+                {
+                    "model": model_name,
+                    "status": "escalated",
+                    "reason": f"Language policy enforcement failed (required: {preferred_output_lang}).",
+                    "answer": None,
+                    "citations": citations,
+                }
+            )
+            continue
+        answer = normalized_answer
+        citation_ok = has_valid_citation(answer, citations)
+        confidence = compute_confidence(hits, citation_ok)
+
+        if settings.strict_citation_gate and not citation_ok:
+            results.append(
+                {
+                    "model": model_name,
+                    "status": "escalated",
+                    "reason": "Answer lacked explicit citations.",
+                    "answer": None,
+                    "citations": citations,
+                    "confidence": confidence,
+                }
+            )
+            continue
+
+        if stale and settings.stale_doc_policy == "escalate":
+            results.append(
+                {
+                    "model": model_name,
+                    "status": "escalated",
+                    "reason": f"Retrieved sources appear outdated (>{settings.stale_doc_days} days): {', '.join(stale[:3])}",
+                    "answer": None,
+                    "citations": citations,
+                    "confidence": confidence,
+                }
+            )
+            continue
+
+        if confidence < settings.confidence_threshold:
+            results.append(
+                {
+                    "model": model_name,
+                    "status": "escalated",
+                    "reason": f"Low confidence ({confidence:.2f} < {settings.confidence_threshold:.2f}).",
+                    "answer": None,
+                    "citations": citations,
+                    "confidence": confidence,
+                }
+            )
+            continue
+
+        if not settings.strict_citation_gate and "[doc:" not in answer and citations:
             answer = f"{answer}\n\nSources: " + ", ".join(f"[{c}]" for c in citations[:3])
+        if stale and settings.stale_doc_policy == "warn":
+            answer = (
+                f"{answer}\n\nWarning: some cited sources may be outdated "
+                f"(>{settings.stale_doc_days} days): {', '.join(stale[:3])}"
+            )
 
         results.append(
             {
@@ -794,6 +1519,7 @@ def ask_compare(payload: CompareRequest) -> dict:
                 "reason": None,
                 "answer": answer,
                 "citations": citations,
+                "confidence": confidence,
             }
         )
 
@@ -836,3 +1562,69 @@ def tickets_dismiss(payload: TicketDismissRequest) -> dict:
         raise HTTPException(status_code=404, detail="Open ticket not found")
     db.dismiss_ticket(payload.ticket_id, payload.reason)
     return {"status": "dismissed", "ticket_id": payload.ticket_id}
+
+
+@app.get("/qa/documents")
+def qa_documents(limit: int = 5000) -> dict:
+    rows = db.list_qa_documents(limit=limit)
+    return {"count": len(rows), "documents": rows}
+
+
+@app.get("/qa/exports")
+def qa_exports() -> dict:
+    settings.exports_path.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for p in sorted(settings.exports_path.glob("qa-export-*"), reverse=True):
+        if not p.is_file():
+            continue
+        rows.append(
+            {
+                "filename": p.name,
+                "size_bytes": p.stat().st_size,
+                "created_at": datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat(),
+                "download_url": f"/qa/export/{p.name}",
+            }
+        )
+    return {"count": len(rows), "exports": rows}
+
+
+@app.post("/qa/export")
+def qa_export(payload: QAExportRequest) -> dict:
+    rows = db.list_qa_documents(limit=payload.limit)
+    settings.exports_path.mkdir(parents=True, exist_ok=True)
+    fmt = payload.format.lower().strip()
+    filename = export_name(fmt)
+    out_path = settings.exports_path / filename
+
+    if fmt == "jsonl":
+        write_qa_jsonl(rows, out_path)
+    elif fmt == "csv":
+        write_qa_csv(rows, out_path)
+    elif fmt == "md":
+        write_qa_md(rows, out_path)
+    elif fmt == "pdf":
+        write_qa_pdf(rows, out_path)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported export format")
+
+    return {
+        "status": "ok",
+        "format": fmt,
+        "count": len(rows),
+        "path": str(out_path),
+        "download_url": f"/qa/export/{filename}",
+    }
+
+
+@app.get("/qa/export/{filename}")
+def qa_export_download(filename: str) -> FileResponse:
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name.startswith("qa-export-"):
+        raise HTTPException(status_code=400, detail="Invalid export filename")
+    target = (settings.exports_path / safe_name).resolve()
+    base = settings.exports_path.resolve()
+    if not str(target).startswith(str(base)):
+        raise HTTPException(status_code=400, detail="Invalid export path")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Export file not found")
+    return FileResponse(target)
