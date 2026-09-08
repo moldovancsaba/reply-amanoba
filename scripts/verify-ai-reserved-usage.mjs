@@ -17,13 +17,28 @@ import { join, relative } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
-// Sanctioned consumer files, relative to the repo root. Empty today by design: issue 697 ships
-// the tokens, the reserved-usage contract, and this gate only — every sanctioned component
-// (AISearchCard, the chat surfaces, the AI promo panel, BottomTabBar's emphasized disc, the
-// focus ring, the featured ring) lands in a follow-on issue in this same delivery. The gate
-// still runs and proves exclusivity from day one; a future PR adding a sanctioned consumer adds
-// its file here in the same change set, per THEME_GOVERNANCE.md's reserved-usage rule.
-export const AI_RESERVED_USAGE_ALLOWLIST = new Set([]);
+// Sanctioned consumer entries, relative to the repo root. Two shapes:
+//   'path/to/File.tsx'                        — the whole file is exempt (a small,
+//                                                single-purpose consumer component).
+//   'path/to/file.css::<exact trimmed line>'  — only that one line is exempt, for a large
+//                                                shared file (styles.css) where a whole-file
+//                                                exemption would blind the gate to every other
+//                                                line in it.
+//
+// First widened by issue 700: SemanticButton's `gradient` brand intent is the one
+// SemanticButton treatment sanctioned to consume `ai.gradient`, reserved for AI-identity CTAs
+// exclusively (e.g. "Ask Scout AI"). Its resting paint lives in packages/gds-theme/styles.css,
+// keyed on `data-gds-brand-button='gradient'` — allowlisted by that single line's exact text,
+// not the whole file, so a real unsanctioned reference anywhere else in styles.css still fails
+// loudly (verify-ai-reserved-usage.test.mjs / gate-mutants.config.mjs both prove this).
+// SemanticButton.tsx itself references no `--gds-ai-` literal and needs no entry. Every other
+// sanctioned component (AISearchCard, the chat surfaces, the AI promo panel, BottomTabBar's
+// emphasized disc, the focus ring, the featured ring) still lands in a follow-on issue in this
+// same delivery. A future PR adding another sanctioned consumer adds its entry here in the
+// same change set, per THEME_GOVERNANCE.md's reserved-usage rule.
+export const AI_RESERVED_USAGE_ALLOWLIST = new Set([
+  "packages/gds-theme/styles.css::background-image: var(--gds-ai-gradient, none);",
+]);
 
 const TOKEN_MARKER = '--gds-ai-';
 
@@ -44,18 +59,22 @@ export function readAllFiles(dir, exts, acc = []) {
 /**
  * Scans `files` (absolute paths) for the reserved `--gds-ai-` token marker, and returns one
  * violation per non-allowlisted line that references it. `root` is used only to compute the
- * relative path checked against `allowlist`.
+ * relative path checked against `allowlist`. An allowlist entry is either a bare relative path
+ * (exempts the whole file) or `path::<exact trimmed line text>` (exempts only that one line, so
+ * a large shared file stays scanned everywhere else).
  */
 export function scanForUnsanctionedAiReferences(files, allowlist, root) {
   const violations = [];
   for (const file of files) {
     const relPath = relative(root, file);
-    if (allowlist.has(relPath)) continue;
+    const wholeFileAllowed = allowlist.has(relPath);
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, index) => {
-      if (line.includes(TOKEN_MARKER)) {
-        violations.push({ file: relPath, line: index + 1, text: line.trim() });
-      }
+      if (!line.includes(TOKEN_MARKER)) return;
+      if (wholeFileAllowed) return;
+      const trimmed = line.trim();
+      if (allowlist.has(`${relPath}::${trimmed}`)) return;
+      violations.push({ file: relPath, line: index + 1, text: trimmed });
     });
   }
   return violations;
@@ -68,12 +87,12 @@ function main() {
   ].filter((file) => existsSync(file));
 
   const violations = scanForUnsanctionedAiReferences(targets, AI_RESERVED_USAGE_ALLOWLIST, ROOT);
-  const allowlistHits = targets.filter((file) => AI_RESERVED_USAGE_ALLOWLIST.has(relative(ROOT, file))).length;
+  const allowlistEntries = AI_RESERVED_USAGE_ALLOWLIST.size;
 
   console.log('AI reserved-usage gate (issue 697)');
-  console.log(`  files scanned:   ${targets.length}`);
-  console.log(`  allowlist files: ${allowlistHits}`);
-  console.log(`  violations:      ${violations.length}`);
+  console.log(`  files scanned:     ${targets.length}`);
+  console.log(`  allowlist entries: ${allowlistEntries}`);
+  console.log(`  violations:        ${violations.length}`);
 
   if (violations.length) {
     console.error('');

@@ -37,6 +37,9 @@ const canaryTokens = {
   // Same reasoning for ai-accent-text-contrast (issue 697): a near-white fill measures well
   // under 4.5:1 and the report-severity rule must still fire on it.
   '--gds-ai-accent': '#ffee00',
+  // Same reasoning for outline-accent-text-contrast (issue 700): a near-white value on the
+  // 'default' light preset's own (light) page surface measures well under 4.5:1.
+  '--gds-brand-accent-action': '#ffee00',
 };
 const canary = validateGdsAccessibilityFloor({ presetId: 'canary', scheme: 'light', tokens: canaryTokens });
 const canaryRules = new Set(canary.map((v) => v.ruleId));

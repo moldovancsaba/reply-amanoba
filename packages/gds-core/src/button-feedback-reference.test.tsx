@@ -32,8 +32,21 @@ describe('GdsButtonFeedbackReference', () => {
         .map((config) => config.feedback!.color),
     );
     // Two buttons per row (success + error), so the row count is derived rather than asserted
-    // against a number that would go stale when the vocabulary gains a colour.
-    expect(screen.getAllByRole('button')).toHaveLength(distinctColors.size * 2);
+    // against a number that would go stale when the vocabulary gains a colour. Excludes the
+    // outline-accent/gradient brand-intent demo added by issue 700, which renders its own
+    // fixed set of buttons unrelated to the vocabulary's colour count.
+    const liveFeedbackButtons = screen.getAllByRole('button').filter((button) => !button.closest('[data-gds-brand-intent-demo]'));
+    expect(liveFeedbackButtons).toHaveLength(distinctColors.size * 2);
+  });
+
+  it('proves the outline-accent and gradient brand intents live, each with rest/loading/disabled buttons (issue 700)', () => {
+    renderReference();
+    for (const variant of ['outline-accent', 'gradient']) {
+      const demo = document.querySelector(`[data-gds-brand-intent-demo='${variant}']`);
+      expect(demo).toBeTruthy();
+      const buttons = demo!.querySelectorAll(`[data-gds-brand-button='${variant}']`);
+      expect(buttons.length).toBe(4);
+    }
   });
 
   it('lists every vocabulary action that declares a feedback config', () => {

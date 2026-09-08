@@ -51,6 +51,21 @@ describe('ai reserved-usage gate (issue 697)', () => {
     }
   });
 
+  it('exempts only the exact allowlisted line in a large shared file, not the whole file (issue 700)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gds-ai-reserved-usage-'));
+    try {
+      const file = join(dir, 'styles.css');
+      writeFileSync(file, 'a { color: red; }\nb { background: var(--gds-ai-gradient); }\nc { color: var(--gds-ai-accent); }\n');
+      const allowlist = new Set(['styles.css::b { background: var(--gds-ai-gradient); }']);
+      const violations = scanForUnsanctionedAiReferences([file], allowlist, dir);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]).toMatchObject({ file: 'styles.css', line: 3 });
+      expect(violations[0].text).toContain('--gds-ai-accent');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('readAllFiles walks recursively and skips node_modules/dist/__snapshots__', () => {
     const dir = mkdtempSync(join(tmpdir(), 'gds-ai-reserved-usage-walk-'));
     try {

@@ -232,6 +232,22 @@ export const gdsAccessibilityFloorRules: readonly GdsFloorRule[] = [
     },
   },
   {
+    id: 'outline-accent-text-contrast',
+    axis: 'color',
+    wcag: '1.4.3 Contrast (Minimum) (AA)',
+    rationale:
+      'SemanticButton\'s `outline-accent` brand intent (issue 700) is the first component that renders an accent as label text on the page — precisely the condition accent-axis.ts\'s `outline` mode enforcement entry names ("No component renders an accent as text on the page today"). That entry governs a different, unrelated mechanism (the 10-name categorical GdsAccentAxis ramp GdsIconBadge draws from), not this single brand-accent role, so it is deliberately left untouched (THEME_GOVERNANCE.md) — this rule is the purpose-built measurement for the pairing that actually renders: `--gds-brand-accent-action` as both the label and the 1.5px stroke, on the page surface a transparent-fill button sits on. Measured across all 27 presets x 2 schemes: every light-scheme value clears 4.5:1 (the generic derivation path ensureContrasts it against canvasLight in semantic-token-source.ts), but 25 of 27 dark-scheme values do not, because that same derivation reuses the light-derived value unchanged in dark mode rather than re-deriving against canvasDark — a real, pre-existing gap this rule surfaces rather than silently enforcing away (class-usa and gold-athlete\'s bespoke emission paths pass in both schemes). Reported, not enforced, until that gap is closed at the source.',
+    evaluate(ctx) {
+      const fill = ctx.tokens['--gds-brand-accent-action'];
+      const page = ctx.tokens['--gds-bg-page'];
+      if (!fill || !page) return [];
+      const ratio = contrastRatio(fill, page, page);
+      if (ratio === null || ratio >= 4.5) return [];
+      return [report(ctx, this, `${fill} on ${page} = ${ratio}:1`, '>= 4.5:1',
+        'Re-derive `--gds-brand-accent-action` against this scheme\'s own canvas (semantic-token-source.ts currently ensures it against canvasLight only, then reuses that value unchanged for dark) rather than the light-derived value.')];
+    },
+  },
+  {
     id: 'disabled-control-still-distinguishable',
     axis: 'color',
     wcag: '1.4.1 Use of Color (A)',

@@ -431,7 +431,11 @@ const vibeThemes: Record<GdsThemePresetId, GdsVibeTheme> = {
         reservedAccents: [
           {
             role: 'ai.gradient',
-            surfaces: ['AISearchCard', 'ChatThread', 'ChatMessage', 'ChatInput', 'StreamingIndicator', 'AIPromoPanel', 'BottomTabBar'],
+            // 'SemanticButton' added by issue 700: its `gradient` brand intent is the one
+            // SemanticButton treatment sanctioned to consume this lane, reserved for
+            // AI-identity CTAs exclusively (e.g. "Ask Scout AI") -- every other brand intent
+            // still keeps the preset's primary/accent roles (THEME_GOVERNANCE.md).
+            surfaces: ['AISearchCard', 'ChatThread', 'ChatMessage', 'ChatInput', 'StreamingIndicator', 'AIPromoPanel', 'BottomTabBar', 'SemanticButton'],
           },
           { role: 'ai.panel', surfaces: ['AIPromoPanel'] },
           {

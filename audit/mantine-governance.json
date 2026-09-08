@@ -251,7 +251,8 @@
         "packages/gds-core/src/AccentPanel.tsx",
         "packages/gds-core/src/QuickStartCard.tsx",
         "packages/gds-core/src/SafeStyles.tsx",
-        "packages/gds-core/src/SemanticButton.tsx"
+        "packages/gds-core/src/SemanticButton.tsx",
+        "packages/gds-theme/styles.css"
       ]
     },
     {
@@ -299,7 +300,8 @@
         "packages/gds-core/src/DetailFactsTable.tsx",
         "packages/gds-core/src/QuickStartCard.tsx",
         "packages/gds-core/src/SemanticButton.tsx",
-        "packages/gds-core/src/SemanticCharts.tsx"
+        "packages/gds-core/src/SemanticCharts.tsx",
+        "packages/gds-theme/styles.css"
       ]
     },
     {

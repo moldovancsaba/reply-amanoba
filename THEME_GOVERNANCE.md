@@ -527,11 +527,16 @@ Reserved-usage contract, exhaustive:
 > exhaustively: AI search/entry surfaces (`AISearchCard`), chat surfaces (`ChatThread`,
 > `ChatMessage`, `ChatInput`, `StreamingIndicator`), the AI promo panel component, the
 > emphasized AI tab disc in `BottomTabBar`, the preset's focus ring (via
-> `GdsFocusRingSpec.colorRole` referencing the ai accent role), and the featured ring. It is
-> never a general action color: `SemanticButton` intents, links, badges, and every non-AI
-> control keep the preset's primary/accent roles. A gradient-filled control carries text at
+> `GdsFocusRingSpec.colorRole` referencing the ai accent role), the featured ring, and —
+> widened by issue 700 — `SemanticButton`'s `gradient` brand intent exclusively, for
+> AI-identity call-to-action buttons (e.g. "Ask Scout AI"). It is never a general action color
+> beyond that one opt-in intent: every other `SemanticButton` intent, link, badge, and non-AI
+> control keeps the preset's primary/accent roles. A gradient-filled control carries text at
 > 14px minimum and weight 600 minimum, since white on the Scout orange fill measures 2.84:1 —
-> below the AA text floor — and is never claimed as a text-contrast pass.
+> below the AA text floor — and is never claimed as a text-contrast pass; `SemanticButton`
+> enforces this floor itself via `GDS_BUTTON_GRADIENT_TEXT_FLOOR`. Where a preset declares no
+> `ai` lane, the `gradient` intent renders a solid primary-fill fallback rather than a broken
+> transparent button.
 
 Governance rules:
 
@@ -561,6 +566,35 @@ Governance rules:
   concatenation, template interpolation of the role name, etc.) — the gate matches the literal
   `--gds-ai-` substring, and a dynamically-built reference would evade it while still violating
   the reservation.
+
+## Two unrelated "accent" concepts, and why `outline` mode was not enforced (issue #700)
+
+GDS carries two structurally unrelated mechanisms that both use the word "accent":
+
+- `GdsAccentAxis`/`GDS_ACCENT_NAMES` (`packages/gds-theme/src/accent-axis.ts`) — ten
+  categorical accent names (plum, indigo, ocean, teal, forest, bronze, terracotta, magenta,
+  slate, grape), each with a shade ramp, consumed by `GdsIconBadge` for categorical/tag UI. Its
+  `GDS_ACCENT_MODE_ENFORCEMENT.outline` entry is measured but deliberately left
+  `enforced: false` — no component renders one of these ten named accents as label text.
+- The single brand accent role — `vibe.accent` / `--gds-brand-accent-action` — consumed by
+  `SemanticButton`'s `accent` brand intent (fill) and, since issue 700, its `outline-accent`
+  intent (stroke + label on a transparent ground).
+
+`outline-accent` is the first component to render the *second* mechanism's accent role as label
+text, but it does **not** flip `accent-axis.ts`'s `outline` enforcement: that entry governs the
+unrelated ten-name categorical ramp, and flipping it was measured (issue 700) to produce 1080
+real, pre-existing contrast failures across the preset catalog that have nothing to do with
+`SemanticButton`. Instead, `accessibility-floor.ts` carries a purpose-built rule,
+`outline-accent-text-contrast`, that measures `--gds-brand-accent-action` against
+`--gds-bg-page` (the surface a transparent-fill button actually sits on) across every preset
+and scheme. Measured result: every light-scheme pairing clears 4.5:1 (the generic derivation
+path in `semantic-token-source.ts` `ensureContrast`s this role against `canvasLight`), but 25 of
+27 dark-scheme pairings do not — that derivation reuses the light-derived value unchanged in
+dark mode rather than re-deriving against `canvasDark` (class-usa and gold-athlete's bespoke
+emission paths are the two that pass in both schemes). The rule is therefore `report`, not
+enforced, exactly like `primary-cta-text-contrast` and `ai-accent-text-contrast` before it: a
+real, honestly-measured gap, printed every run, closed at the source (re-deriving the dark
+value) rather than papered over by enforcing a mode that would fail 1080 unrelated cases.
 
 ## Importing an externally-produced design (issue #535)
 

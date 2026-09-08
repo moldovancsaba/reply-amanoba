@@ -55,6 +55,13 @@ const badgeShapeComponents = [
   { selector: '[data-gds-badge-emoji-coin]', label: 'GdsBadge emoji glyph disc (issue #525)' },
 ];
 
+// The two new SemanticButton brand intents (issue 700) must remain visible buttons under
+// forced-colors, same as every other non-default-variant button.
+const brandIntentComponents = [
+  { selector: "[data-gds-brand-intent-demo='outline-accent'] .mantine-Button-root", label: 'SemanticButton outline-accent brand intent' },
+  { selector: "[data-gds-brand-intent-demo='gradient'] .mantine-Button-root", label: 'SemanticButton gradient brand intent' },
+];
+
 // Route coverage follows the pattern-catalog families that mount the components
 // (`/patterns/operations` = Kanban and Forms; `/systems` = the badge system).
 const routeConfigs = [
@@ -67,6 +74,7 @@ const routeConfigs = [
   { route: '/patterns/operations', cases: widenedCases, components: formComponents },
   // Badge system lives under the systems family now; the sweep follows the content, not the old filing.
   { route: '/systems', cases: baseCases, components: badgeShapeComponents },
+  { route: '/patterns/feedback', cases: baseCases, components: brandIntentComponents },
 ];
 
 async function launchBrowser() {
