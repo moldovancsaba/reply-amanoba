@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Button } from '@mantine/core';
+import { Button, VisuallyHidden } from '@mantine/core';
 import type { ButtonProps } from '@mantine/core';
 import { useGdsTranslation } from '@sovereignsquad/gds-theme';
 import { IconCheck, IconX } from '@tabler/icons-react';
@@ -15,12 +15,34 @@ import type { GdsVocabularyPack, SemanticActionId } from './vocabulary';
  */
 export const GDS_BUTTON_FEEDBACK_DURATION_MS = 2000;
 
+/**
+ * Minimum label typography for the `gradient` brand intent (issue 700). White label text on
+ * the reserved Scout AI gradient fill (issue 697) clears only the WCAG non-text threshold
+ * (3:1) -- the `ai-accent-text-contrast` accessibility-floor rule measures and reports this
+ * every run -- never the 4.5:1 normal-text floor, so the gradient intent's label is held at or
+ * above this size and weight as a hard component invariant rather than relying on a preset to
+ * compensate.
+ */
+export const GDS_BUTTON_GRADIENT_TEXT_FLOOR = { fontSizePx: 14, fontWeight: 600 } as const;
+
+/** Outline stroke width for the `outline-accent` brand intent, in px (issue 700). */
+export const GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX = 1.5;
+
 /** Props for `SemanticButton`; extends Mantine `ButtonProps` and the native button attributes. */
 export interface SemanticButtonProps extends ButtonProps, Omit<React.ComponentPropsWithoutRef<'button'>, keyof ButtonProps | 'leftSection' | 'children'> {
   /** Governed semantic action id whose label and icon are resolved from the vocabulary. */
   action: SemanticActionId;
-  /** Applies a brand color treatment; the `disabled` variant also disables the button. */
-  brandVariant?: 'primary' | 'secondary' | 'accent' | 'disabled';
+  /**
+   * Applies a brand color treatment; the `disabled` variant also disables the button.
+   * `outline-accent` (transparent fill, accent stroke and label) and `gradient` (the reserved
+   * Scout AI gradient fill, issue 697, over a solid primary-chain fallback where a preset
+   * declares no `ai` lane) are issue 700: their full hover/pressed/disabled state axis lives in
+   * `packages/gds-theme/styles.css`, keyed on the `data-gds-brand-button` attribute this
+   * component emits, because a stylesheet `:hover`/`:active` rule cannot override an inline
+   * style. Never combine either with a destructive action -- style those through the existing
+   * `danger` vocabulary intent instead.
+   */
+  brandVariant?: 'primary' | 'secondary' | 'accent' | 'disabled' | 'outline-accent' | 'gradient';
   loading?: boolean;
   /** Triggers a transient success/error feedback treatment (icon, color, label) for ~2s. */
   feedbackState?: 'success' | 'error' | null;
@@ -65,6 +87,13 @@ const brandButtonStyles: Record<NonNullable<SemanticButtonProps['brandVariant']>
     borderColor: 'var(--gds-control-disabledBg, var(--mantine-color-gray-2))',
     color: 'var(--gds-control-disabledText, var(--mantine-color-gray-6))',
   },
+  // `outline-accent` and `gradient` (issue 700) carry no inline paint. A stylesheet
+  // `:hover`/`:active` rule cannot override an inline style without `!important`, so their
+  // entire resting paint -- and every state layered on top of it -- lives in
+  // packages/gds-theme/styles.css, keyed on `data-gds-brand-button`; the component contributes
+  // only the attribute.
+  'outline-accent': {},
+  gradient: {},
 };
 
 /**
@@ -112,10 +141,20 @@ export function SemanticButton({
   const brandStyle = brandVariant ? brandButtonStyles[brandVariant] : undefined;
   const disabled = props.disabled || brandVariant === 'disabled';
 
+  // `outline-accent`/`gradient` paint entirely from the stylesheet (see brandButtonStyles
+  // above), so while a transient feedback treatment is showing, the governed success/danger
+  // button rules in styles.css must be the ones that paint instead -- withholding the attribute
+  // for exactly that window is what hands the cascade to those existing rules, so feedback
+  // fully overrides intent paint with no new stylesheet rule and no residual stroke/gradient.
+  // The four pre-existing variants are untouched: their resting paint is inline and already
+  // wins the cascade regardless of feedback, exactly as before this change (issue 700).
+  const isStylesheetPaintedBrand = brandVariant === 'outline-accent' || brandVariant === 'gradient';
+  const brandButtonAttr = isStylesheetPaintedBrand && internalFeedback ? undefined : brandVariant;
+
   if (!mounted) {
     const { leftSection, style, ...buttonProps } = props;
     return (
-      <Button {...buttonProps} loading={loading} color={color} data-gds-brand-button={brandVariant} disabled={disabled} style={{ ...brandStyle, ...style }}>
+      <Button {...buttonProps} loading={loading} color={color} data-gds-brand-button={brandButtonAttr} disabled={disabled} aria-busy={loading ? true : undefined} style={{ ...brandStyle, ...style }}>
         {labelOverride ?? getSemanticActionLabel(action, undefined, vocabularyPacks)}
       </Button>
     );
@@ -133,16 +172,26 @@ export function SemanticButton({
   }
 
   return (
-    <Button
-      {...props}
-      leftSection={<Icon size="1rem" />}
-      loading={loading}
-      color={color}
-      data-gds-brand-button={brandVariant}
-      disabled={disabled}
-      style={{ ...brandStyle, ...props.style }}
-    >
-      {label}
-    </Button>
+    <>
+      <Button
+        {...props}
+        leftSection={<Icon size="1rem" />}
+        loading={loading}
+        color={color}
+        data-gds-brand-button={brandButtonAttr}
+        disabled={disabled}
+        aria-busy={loading ? true : undefined}
+        style={{ ...brandStyle, ...props.style }}
+      >
+        {label}
+      </Button>
+      {/* Announces the transient feedback label swap; the current source set no aria-live
+          before this change, so the state change was silent to screen readers. */}
+      {internalFeedback ? (
+        <VisuallyHidden role="status" aria-live="polite" aria-atomic="true">
+          {label}
+        </VisuallyHidden>
+      ) : null}
+    </>
   );
 }

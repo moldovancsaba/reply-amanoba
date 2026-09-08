@@ -1,4 +1,7 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { Text, Title } from '@mantine/core';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -70,7 +73,7 @@ import { PublicShell } from './PublicShell';
 import { ShareButtonGroup } from './ShareButtonGroup';
 import { DiscoveryShell, useDiscoveryShellState } from './DiscoveryShell';
 import { BottomTabBar, BOTTOM_TAB_HEIGHT } from './BottomTabBar';
-import { SemanticButton } from './SemanticButton';
+import { GDS_BUTTON_FEEDBACK_DURATION_MS, GDS_BUTTON_GRADIENT_TEXT_FLOOR, GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX, SemanticButton } from './SemanticButton';
 import { SectionPanel } from './SectionPanel';
 import { ReferenceSection } from './ReferenceSection';
 import { SidebarNav, SidebarNavItem, SidebarNavSection } from './SidebarNav';
@@ -955,6 +958,134 @@ describe('@sovereignsquad/gds-core', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'primary');
     expect(screen.getByRole('button', { name: 'Submit' })).toHaveAttribute('data-gds-brand-button', 'accent');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  });
+
+  it('extends brandVariant with outline-accent and gradient (issue 700), emitting the attribute for all six values', () => {
+    renderWithGds(
+      <>
+        <SemanticButton action="save" brandVariant="primary" />
+        <SemanticButton action="submit" brandVariant="secondary" />
+        <SemanticButton action="cancel" brandVariant="accent" />
+        <SemanticButton action="delete" brandVariant="disabled" />
+        <SemanticButton action="preview" brandVariant="outline-accent" />
+        <SemanticButton action="add" brandVariant="gradient" />
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'primary');
+    expect(screen.getByRole('button', { name: 'Submit' })).toHaveAttribute('data-gds-brand-button', 'secondary');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('data-gds-brand-button', 'accent');
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveAttribute('data-gds-brand-button', 'disabled');
+    expect(screen.getByRole('button', { name: 'Preview' })).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+    expect(screen.getByRole('button', { name: 'Add' })).toHaveAttribute('data-gds-brand-button', 'gradient');
+  });
+
+  it('carries GDS_BUTTON_GRADIENT_TEXT_FLOOR and GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX as the documented invariants (issue 700)', () => {
+    expect(GDS_BUTTON_GRADIENT_TEXT_FLOOR).toEqual({ fontSizePx: 14, fontWeight: 600 });
+    expect(GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX).toBe(1.5);
+  });
+
+  it('GDS_BUTTON_GRADIENT_TEXT_FLOOR is actually applied in styles.css, not just documented (issue 700)', () => {
+    // jsdom does not evaluate an imported stylesheet, so this asserts the CSS text directly
+    // (the established pattern -- see gds-theme/src/semantic-role-tokens.test.ts) rather than a
+    // rendered computed style; real-browser proof lives in the CDP runtime gate sweep instead.
+    const stylesCss = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'gds-theme', 'styles.css'), 'utf8');
+    const gradientRuleMatch = stylesCss.match(/\[data-gds-brand-button='gradient'\]:not\(\[data-disabled\]\)[^{]*\{[^}]*\}/);
+    expect(gradientRuleMatch).not.toBeNull();
+    const rule = gradientRuleMatch![0];
+    expect(rule).toContain(`font-size: ${GDS_BUTTON_GRADIENT_TEXT_FLOOR.fontSizePx}px;`);
+    expect(rule).toContain(`font-weight: ${GDS_BUTTON_GRADIENT_TEXT_FLOOR.fontWeight};`);
+  });
+
+  it('renders the outline-accent/gradient intent attribute on the SSR pre-mount branch, matching the mounted branch (issue 700)', () => {
+    renderWithGds(
+      <>
+        <SemanticButton action="save" brandVariant="outline-accent" prerenderLabelOnly />
+        <SemanticButton action="submit" brandVariant="gradient" prerenderLabelOnly />
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+    expect(screen.getByRole('button', { name: 'Submit' })).toHaveAttribute('data-gds-brand-button', 'gradient');
+  });
+
+  it('a disabled prop on a new brand intent renders disabled, not the intent DOM attribute changing (issue 700)', () => {
+    renderWithGds(
+      <>
+        <SemanticButton action="save" brandVariant="outline-accent" disabled />
+        <SemanticButton action="submit" brandVariant="gradient" disabled />
+      </>,
+    );
+
+    const outline = screen.getByRole('button', { name: 'Save' });
+    const gradient = screen.getByRole('button', { name: 'Submit' });
+    expect(outline).toBeDisabled();
+    expect(outline).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+    expect(gradient).toBeDisabled();
+    expect(gradient).toHaveAttribute('data-gds-brand-button', 'gradient');
+  });
+
+  it('sets aria-busy while loading, for any brand intent', () => {
+    renderWithGds(<SemanticButton action="save" brandVariant="gradient" loading />);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('does not set aria-busy when not loading', () => {
+    renderWithGds(<SemanticButton action="save" brandVariant="gradient" />);
+    expect(screen.getByRole('button', { name: 'Save' })).not.toHaveAttribute('aria-busy');
+  });
+
+  it('withholds data-gds-brand-button on outline-accent/gradient during transient feedback, so the governed success/danger rules paint instead, and restores it on revert (issue 700)', () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = renderWithGds(<SemanticButton action="save" brandVariant="outline-accent" />);
+      expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+
+      rerender(<SemanticButton action="save" brandVariant="outline-accent" feedbackState="error" />);
+      expect(screen.getByRole('button', { name: 'Something went wrong' })).not.toHaveAttribute('data-gds-brand-button');
+
+      act(() => { vi.advanceTimersByTime(GDS_BUTTON_FEEDBACK_DURATION_MS); });
+      rerender(<SemanticButton action="save" brandVariant="outline-accent" feedbackState={null} />);
+      expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps data-gds-brand-button on the four pre-existing brand variants during transient feedback, unchanged from before this change (issue 700)', () => {
+    const { rerender } = renderWithGds(<SemanticButton action="save" brandVariant="primary" />);
+    rerender(<SemanticButton action="save" brandVariant="primary" feedbackState="success" />);
+    expect(screen.getByRole('button', { name: 'Saved' })).toHaveAttribute('data-gds-brand-button', 'primary');
+  });
+
+  it('announces a transient feedback label change through a polite live region (issue 700)', () => {
+    renderWithGds(<SemanticButton action="save" feedbackState="success" />);
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('renders no live region when no feedback is active', () => {
+    renderWithGds(<SemanticButton action="save" />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('renders both new brand intents under every shipped theme preset id without throwing (issue 700)', () => {
+    for (const vibe of getGdsVibeThemes()) {
+      document.documentElement.setAttribute('data-gds-theme-preset', vibe.id);
+      for (const scheme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-mantine-color-scheme', scheme);
+        const { unmount } = renderWithGds(
+          <>
+            <SemanticButton action="save" brandVariant="outline-accent" />
+            <SemanticButton action="submit" brandVariant="gradient" />
+          </>,
+        );
+        expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('data-gds-brand-button', 'outline-accent');
+        expect(screen.getByRole('button', { name: 'Submit' })).toHaveAttribute('data-gds-brand-button', 'gradient');
+        unmount();
+      }
+    }
+    document.documentElement.removeAttribute('data-gds-theme-preset');
+    document.documentElement.removeAttribute('data-mantine-color-scheme');
   });
 
   it('renders choice chips as neutral links and toggle buttons', async () => {

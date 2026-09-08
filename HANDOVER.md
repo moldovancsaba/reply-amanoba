@@ -10,44 +10,37 @@ memory of the session that produced this state**.
 
 ## 1. Where we are, in one paragraph
 
-`main` is at **`327179f`**, version **6.7.0** (unreleased — `VERSION` has not been bumped
-for 6.8.0 yet; that happens once the whole milestone below ships). `origin/dev` is two commits
-ahead, at **`6c39ead`**: `c694d2c` ("Add the Scout AI reserved sub-brand gradient accent lane
-(`--gds-ai-*`)", closes #697) plus `6c39ead` (this file's rewrite). Both are open as
-**[PR #736](https://github.com/sovereignsquad/general-design-system/pull/736)**, base `main`.
-Local `npm run preflight` passed clean on the `c694d2c` commit before it was pushed.
+`main` is at **`8595d0d`**, version **6.7.0** (unreleased — `VERSION` has not been bumped for
+6.8.0 yet; that happens once the whole milestone below ships). `dev`, `origin/dev`, and
+`origin/main` are all identical to `main` at `8595d0d` — fully synced, clean tree, nothing
+pending, confirmed by direct `git rev-parse` comparison of all four.
 
-**CI status, as actually observed (not assumed):** on the first CI run
-(`https://github.com/sovereignsquad/general-design-system/actions/runs/34149880005`),
-`validate (mantine-9)` **passed** (10m50s) but `validate (mantine-7)` **failed** (7m17s) inside
-`verify:forced-colors-runtime`, with a headless-Chrome DevTools-connection timeout preceded by
-a cascade of `Failed to connect to the bus` (dbus) errors — a runner-environment problem, not a
-gate finding a real defect in the code. Strong evidence this is CI infrastructure flakiness,
-not a regression from this PR: `verify:forced-colors-runtime` and `scripts/lib/browser-runtime.mjs`
-are untouched by #697's diff, and the `mantine-9` leg ran the identical check against the
-identical commit and passed clean. A rerun of just the failed job was triggered
-(`gh run rerun 34149880005 --repo sovereignsquad/general-design-system --failed`) before the
-session had to stop — **its result was not observed; check it fresh, don't assume it passed.**
-If it fails again with the *same* dbus/DevTools signature, that raises the probability of a
-real, currently-broken runner/workflow (check whether `.github/workflows/*.yml` or the runner
-image changed recently) rather than a one-off flake — investigate the workflow/runner rather
-than rerunning indefinitely.
-
-**Check `gh pr checks 736 --repo sovereignsquad/general-design-system` before trusting anything
-above or doing anything else.** If green, merge (`gh pr merge 736 --merge --delete-branch=false`)
-and sync `dev`/`main` (`git fetch origin main:main && git checkout dev && git rebase main dev &&
-git push origin dev`) before starting the next issue — the exact close-out sequence used for
-every prior issue this session (§3). If still red on a *different* check than
-`verify:forced-colors-runtime`, treat it as a real finding and diagnose before merging (Rule 13:
-never leave a red run on main, and never merge a red PR).
+**[PR #736](https://github.com/sovereignsquad/general-design-system/pull/736) (#697 + the
+HANDOVER.md rewrite) is MERGED, and issue #697 is CLOSED** (confirmed via `gh issue view 697
+--json state,closedAt`: `CLOSED`, `2026-09-07T18:34:55Z`). Its CI history is worth knowing
+about even though it's resolved: the **first** run
+(`https://github.com/sovereignsquad/general-design-system/actions/runs/34149880005`) had
+`validate (mantine-9)` pass but `validate (mantine-7)` fail inside `verify:forced-colors-runtime`
+on a headless-Chrome DevTools-connection timeout preceded by a cascade of `Failed to connect to
+the bus` (dbus) errors — a runner-environment problem, not a real defect (that script and
+`scripts/lib/browser-runtime.mjs` are untouched by #697's diff, and `mantine-9` ran the
+identical check on the identical commit and passed). A job rerun
+(`gh run rerun 34149880005 --repo sovereignsquad/general-design-system --failed`) came back
+**fully green** (`mantine-7` pass 9m47s, `mantine-9` pass, `budget report` pass;
+run `34150727441`), confirming the flake diagnosis. **If you see this exact dbus/DevTools
+signature on a future PR, a rerun is the right first move, not a code investigation** — but if
+it recurs repeatedly across different PRs, that graduates from "one-off flake" to "worth
+checking whether the runner image or a workflow file changed."
 
 Everything in this repo right now is one big effort: delivering **GDS 6.8.0 milestone 35,
 "GDS 6.8.0 - Your Field Delivery"** (org project 11:
 https://github.com/orgs/sovereignsquad/projects/11) — a new governed brand preset (`your-field`,
 a v3 re-base of the ClassScout brand) plus the components, axis extensions, and playground
-capabilities it needs. Tracking issue: **#692**. Of 28 filed issues, **12 are closed**
-(counting #697 as done-in-substance though not yet merged), **16 remain open**, one of which
-(#692 itself) is the tracking issue that should stay open until every other one closes.
+capabilities it needs. Tracking issue: **#692**. Of 28 filed issues, **13 are closed**, **15
+remain open**, one of which (#692 itself) is the tracking issue that should stay open until
+every other one closes. **The very next step is simply: pick the next open issue from §7 and
+follow the §3 loop** — there is no pending PR, no pending CI, no uncommitted state to resolve
+first.
 
 ---
 
@@ -58,7 +51,7 @@ or that this session specifically had to apply repeatedly:
 
 - **Rule 1, zero-tolerance:** nothing lands on `main` with any warning, deprecation, or error
   anywhere in the chain. Never suppress a check to pass it — fix the source. (One narrow,
-  deliberate, already-accepted exception exists — see §6.)
+  pre-existing, already-tracked exception exists — see §7's note on issue #723.)
 - **Rule 2:** every code/doc/config change traces to a GitHub issue.
 - **Rule 6:** `dev`/`preview` branches and direct push to `main` are pre-authorized when the
   owner says "commit and push." This session has consistently used PRs from `dev` → `main`
@@ -170,16 +163,16 @@ this window itself did, start to finish:
   unchecked), new `GdsFontStyle`/`fontStyles` italic-display input. Pure mechanism work in
   `packages/gds-theme/src/axes.ts` — no preset, no component. `publishedGraphOverlap` budget
   ratcheted 189 → 208 (measured; justified). Merged via PR #735.
-- **#697** — Scout AI reserved sub-brand gradient accent lane. See §5 for the full detail —
-  this is the one still sitting as an unmerged, CI-pending PR (#736) as of this handover.
+- **#697** — Scout AI reserved sub-brand gradient accent lane. See §5 for the full detail.
+  Merged via PR #736 (after a CI flake and a clean rerun, see §1) — closed.
 
-Every one of the three merged issues followed the §3 loop exactly, including the
+Every one of the four issues above followed the §3 loop exactly, including the
 "delegate → independently re-verify → find something real → fix → commit → preflight → push →
 watch CI → merge → sync" shape.
 
 ---
 
-## 5. #697 in detail — read this before checking on PR #736
+## 5. #697 in detail — merged; read this before touching Scout AI / `your-field` code again
 
 **What it is:** a governed, CSS-variable-based sub-brand gradient accent token family
 (`ai.gradient`, `ai.panel`, `ai.accent`) in `packages/gds-theme`, emitted as `--gds-ai-*` for
@@ -220,12 +213,10 @@ entry in the same budget file, read that entry for the full mechanism explanatio
 **Verified this session, independently, after the delegated agent's own report:** full-diff
 review of all 31 changed files against the issue's exact Section 9/11 code shapes (all
 matched), full monorepo `npm run build`, `npm run lint`, `npm run test:run` (1288/1288 passed),
-committed, `npm run preflight` passed clean, pushed, PR #736 opened. **CI's first run came back
-mixed — `mantine-9` passed, `mantine-7` failed inside `verify:forced-colors-runtime` on a
-headless-Chrome/dbus timeout that has nothing to do with this diff (full detail and the
-already-triggered rerun in §1).** Confirm the rerun's actual result before merging — §1 is the
-authoritative, most-recently-corrected account of this; don't rely on this paragraph's framing
-if it ever drifts from §1.
+committed, `npm run preflight` passed clean, pushed. CI's first run came back mixed
+(`mantine-9` passed, `mantine-7` failed inside `verify:forced-colors-runtime` on a
+headless-Chrome/dbus timeout unrelated to this diff), a rerun of the failed job came back fully
+green, and PR #736 was merged — full detail in §1. #697 is closed.
 
 One thing to be aware of if you see it again: `npm run test:run` prints two lines that look
 like real failures —
@@ -301,9 +292,9 @@ shape recurred at least three times this session — always double-check the rea
   give it a `reason` and a concrete `reviewBy` date (this milestone has been using
   `2026-12-01` consistently for "follow-on issue in the same delivery will consume this").
 - **This repo's `GdsLayoutToken`/similar closed-union props do not take raw numbers or
-  arbitrary strings** — e.g. `GdsStack`'s `gap` is `0 | 'none' | 'xs' | 'sm' | 'md' | 'lg' |
-  'xl' | '2xl'` (`packages/gds-theme/src/LayoutPrimitives.tsx` — wherever the actual current
-  definition lives; check it directly, don't assume the exact union from memory).
+  arbitrary strings** — `GdsStack`'s `gap` is `0 | 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' |
+  '2xl'` (`packages/gds-core/src/LayoutPrimitives.tsx:8` — verified directly against source,
+  not assumed; re-check if it's moved by the time you read this).
 - **Icon sourcing is real-icons-only, always pre-verify before delegating**: `@tabler/icons-react`
   first (check `node_modules/@tabler/icons-react/dist/esm/icons/` for the exact export name),
   then iconify.design's collections, preferring stroke-style; `fillMode?: 'stroke' | 'fill'` on
@@ -317,16 +308,15 @@ shape recurred at least three times this session — always double-check the rea
 
 ---
 
-## 7. Remaining open issues (16, including the tracking issue — refreshed 2026-09-07 via `gh issue list`, re-check before trusting)
+## 7. Remaining open issues (15, including the tracking issue — refreshed 2026-09-07 post-#697-merge via `gh issue list`, re-check before trusting)
 
 | Issue | Title | Note |
 | --- | --- | --- |
 | #692 | Tracking: Your Field brand lane and delivery | Keep open until every other row closes. Its own delivery-board table is stale (§3) — don't trust it for per-issue status. |
-| #697 | Scout AI sub-brand accent lane | **Implemented, committed, pushed, PR #736 open.** Check CI, merge, sync (§1) before anything else. |
-| #700 | SemanticButton — outline-accent/gradient intents, v3 micro-action states | Per #692's board: was blocked by #693 + #697. #693 is closed; #697 is functionally done pending merge — should be unblocked once #736 merges. |
+| #700 | SemanticButton — outline-accent/gradient intents, v3 micro-action states | Was blocked by #693 + #697. Both now closed/merged — unblocked. |
 | #701 | ListingCard — featured ring, pick overlay badge, generated-tile default media | Was blocked by #693 merge — #693 is closed, so unblocked. |
 | #702 | SidebarNav — light-surface variant, promo/profile slots | Was blocked by #693 + #698 — both closed, unblocked. |
-| #703 | GdsScoutPromoPanel + GdsProfileSwitcher | Was blocked by #702 + #697 — check #702's actual status before starting; #697 will be unblocked once #736 merges. |
+| #703 | GdsScoutPromoPanel + GdsProfileSwitcher | Was blocked by #702 + #697. #697 now closed/merged; check #702's actual status before starting. |
 | #707 | Browse canvas — viewport-fill, list/split/map view modes | Was blocked by #698 — closed, unblocked. |
 | #712 | GdsBurgerMenu + BottomTabBar emphasized center tab | Was blocked by #698 — closed, unblocked. |
 | #714 | Media: generated-first default sweep | Independent per #692's board. |
@@ -388,9 +378,9 @@ meant to be followed, not summarized from a title.
 
 ## 10. If you read nothing else
 
-1. **Check `gh pr checks 736 --repo sovereignsquad/general-design-system` first.** If green,
-   merge #736 and sync `dev`/`main` (exact commands in §1) before starting anything new.
-2. Then work down the table in §7, following the loop in §3, applying every gotcha in §6.
+1. **Nothing is pending.** #736 merged, #697 is closed, `dev`/`main`/`origin` are all synced
+   at the same commit (§1) — go straight to picking the next issue.
+2. Work down the table in §7, following the loop in §3, applying every gotcha in §6.
 3. Full monorepo `npm run build`, never a scoped one — this alone caught a real bug on #709.
 4. `audit/budgets.json` is an exact-match ratchet in both directions, with a prepended
    justification for every change — never leave unclaimed slack.

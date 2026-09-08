@@ -1,7 +1,7 @@
 {
   "declared": 311,
-  "referenced": 123,
-  "extensionPoints": 136,
+  "referenced": 124,
+  "extensionPoints": 135,
   "pendingWireUp": 0,
   "unreachableCount": 0,
   "budget": 0,
@@ -360,13 +360,6 @@
       "token": "--gds-ai-accent",
       "classification": "extension-point",
       "reason": "Reserved sub-brand accent lane (issue 697). Scout AI accent colour for the your-field preset only, also the intended focus-ring/featured-ring role (GdsFocusRingSpec.colorRole); wiring either ring is explicitly out of scope for issue 697 (separate issues in this delivery). Measured, not silently unowned: the ai-accent-text-contrast accessibility-floor rule reports its contrast every run.",
-      "reviewBy": "2026-12-01",
-      "declaredIn": "getGdsVibeThemeCssVariables"
-    },
-    {
-      "token": "--gds-ai-gradient",
-      "classification": "extension-point",
-      "reason": "Reserved sub-brand accent lane (issue 697). Scout AI identity gradient for the your-field preset only; issue 697 explicitly ships the token, its dark sibling, and the reserved-usage gate/contract with no consuming component (no AISearchCard, chat surfaces, AI promo panel, or BottomTabBar emphasized disc yet) to avoid unreviewed, unrequested UI work. The follow-on Scout AI component issues in the same delivery are the real consumers.",
       "reviewBy": "2026-12-01",
       "declaredIn": "getGdsVibeThemeCssVariables"
     },

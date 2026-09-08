@@ -1,8 +1,8 @@
 {
   "presetsChecked": 54,
-  "rulesEvaluated": 10,
+  "rulesEvaluated": 11,
   "violationCount": 0,
-  "reportCount": 22,
+  "reportCount": 47,
   "rules": [
     {
       "id": "focus-ring-min-width",
@@ -57,6 +57,12 @@
       "axis": "color",
       "wcag": "1.4.3 Contrast (Minimum) (AA)",
       "rationale": "The reserved ai.accent role (issue 697) is a non-text, sub-brand identity colour — the Your Field handoff's Scout orange, #ff6b35 — never a general text or action fill. White on it measures 2.84:1, clearing neither AA text threshold. This rule measures and prints that number every run so it stays derived (Rule 14), never retyped as prose, without treating a non-text lane as a text-contrast failure it never claimed to pass."
+    },
+    {
+      "id": "outline-accent-text-contrast",
+      "axis": "color",
+      "wcag": "1.4.3 Contrast (Minimum) (AA)",
+      "rationale": "SemanticButton's `outline-accent` brand intent (issue 700) is the first component that renders an accent as label text on the page — precisely the condition accent-axis.ts's `outline` mode enforcement entry names (\"No component renders an accent as text on the page today\"). That entry governs a different, unrelated mechanism (the 10-name categorical GdsAccentAxis ramp GdsIconBadge draws from), not this single brand-accent role, so it is deliberately left untouched (THEME_GOVERNANCE.md) — this rule is the purpose-built measurement for the pairing that actually renders: `--gds-brand-accent-action` as both the label and the 1.5px stroke, on the page surface a transparent-fill button sits on. Measured across all 27 presets x 2 schemes: every light-scheme value clears 4.5:1 (the generic derivation path ensureContrasts it against canvasLight in semantic-token-source.ts), but 25 of 27 dark-scheme values do not, because that same derivation reuses the light-derived value unchanged in dark mode rather than re-deriving against canvasDark — a real, pre-existing gap this rule surfaces rather than silently enforcing away (class-usa and gold-athlete's bespoke emission paths pass in both schemes). Reported, not enforced, until that gap is closed at the source."
     },
     {
       "id": "disabled-control-still-distinguishable",

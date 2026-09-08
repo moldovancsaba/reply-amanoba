@@ -26,8 +26,20 @@ describe('accessibility floor (issue 559)', () => {
     ['motion-duration-bounded', { '--gds-motion-duration-slow': '5000ms' }],
     ['reduced-motion-not-overridden', { '--gds-motion-policy': 'never-reduce' }],
     ['disabled-control-still-distinguishable', { '--gds-control-disabledText': '#cccccc', '--gds-control-disabledBg': '#cccccc' }],
+    ['outline-accent-text-contrast', { '--gds-brand-accent-action': '#ffee00' }],
   ])('rule %s fires on its own breach', (ruleId, tokens) => {
     expect(probe(tokens).map((v) => v.ruleId)).toContain(ruleId);
+  });
+
+  it('outline-accent-text-contrast is report severity, not a build-failing violation (issue 700)', () => {
+    const found = probe({ '--gds-brand-accent-action': '#ffee00' });
+    const finding = found.find((v) => v.ruleId === 'outline-accent-text-contrast');
+    expect(finding).toBeTruthy();
+    expect(finding!.severity).toBe('report');
+  });
+
+  it('outline-accent-text-contrast stays silent on the real default/light pairing (issue 700)', () => {
+    expect(probe({}).map((v) => v.ruleId)).not.toContain('outline-accent-text-contrast');
   });
 
   it('every rule names the axis field to change, not just the failure', () => {

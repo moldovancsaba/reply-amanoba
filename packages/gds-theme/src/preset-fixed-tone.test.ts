@@ -68,7 +68,11 @@ describe('data-gds-fixed-tone preset opt-out (#724)', () => {
   });
 
   it('excludes the attribute on the subject of every preset-gated rule outside the accessibility blocks', () => {
-    const missing = covered.filter(({ subject }) => !subject.replace(/::[a-z-]+$/, '').endsWith(CLAUSE));
+    // Strips one trailing pseudo-element (`::placeholder`) or pseudo-class (`:hover`/`:active`,
+    // issue 700's outline-accent/gradient state rules) after the fixed-tone clause -- a
+    // pseudo-class must follow every other simple selector on a compound selector, including
+    // `:where()`, so the clause itself still gates the base element either way.
+    const missing = covered.filter(({ subject }) => !subject.replace(/:{1,2}[a-z-]+$/, '').endsWith(CLAUSE));
     expect(missing.map(({ line, selector }) => `${line}: ${selector}`)).toEqual([]);
   });
 

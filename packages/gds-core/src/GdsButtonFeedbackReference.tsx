@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Box, Group, Stack, Text } from '@mantine/core';
 import { GdsVocabulary } from './vocabulary';
-import { GDS_BUTTON_FEEDBACK_DURATION_MS, SemanticButton } from './SemanticButton';
+import {
+  GDS_BUTTON_FEEDBACK_DURATION_MS,
+  GDS_BUTTON_GRADIENT_TEXT_FLOOR,
+  GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX,
+  SemanticButton,
+} from './SemanticButton';
 import { SimpleDataTable } from './SimpleDataTable';
 
 type FeedbackRow = {
@@ -50,6 +55,40 @@ function LiveFeedbackButton({ action }: { action: string }) {
     <Group gap="xs" wrap="nowrap">
       <SemanticButton action={action as never} feedbackState={state} onClick={() => fire('success')} />
       <SemanticButton action={action as never} variant="light" feedbackState={state} onClick={() => fire('error')} />
+    </Group>
+  );
+}
+
+const brandIntentDemos = [
+  { variant: 'outline-accent' as const, label: 'outline-accent' },
+  { variant: 'gradient' as const, label: 'gradient' },
+];
+
+/**
+ * Live proof for the two brand intents added by issue 700 -- rest, hover/pressed (stylesheet-
+ * driven; hover/press the rest button to see them), disabled, loading, and the same transient
+ * feedback treatment as every other brand intent, reusing `LiveFeedbackButton`'s fire/timer
+ * pattern so both intents prove they hand off to the governed success/danger paint during
+ * feedback rather than keeping their own stroke/gradient.
+ */
+function BrandIntentDemo({ variant }: { variant: 'outline-accent' | 'gradient' }) {
+  const [state, setState] = useState<'success' | 'error' | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fire = useCallback((next: 'success' | 'error') => {
+    setState(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState(null), GDS_BUTTON_FEEDBACK_DURATION_MS);
+  }, []);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  return (
+    <Group gap="xs" wrap="wrap" data-gds-brand-intent-demo={variant} align="center">
+      <SemanticButton action="save" brandVariant={variant} feedbackState={state} onClick={() => fire('success')} />
+      <SemanticButton action="delete" brandVariant={variant} feedbackState={state} onClick={() => fire('error')} />
+      <SemanticButton action="preview" brandVariant={variant} loading />
+      <SemanticButton action="preview" brandVariant={variant} disabled />
     </Group>
   );
 }
@@ -137,6 +176,33 @@ export function GdsButtonFeedbackReference() {
           wherever it appears. Pass `feedbackText` to replace the label in either state — the icon
           stays governed.
         </Text>
+      </Stack>
+
+      <Stack gap="2xs" data-gds-brand-intent-reference="">
+        <Group gap="xs" align="center">
+          <Text fw={700}>Brand intents — outline-accent &amp; gradient</Text>
+          <Badge variant="light">{GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX}px stroke</Badge>
+          <Badge variant="light">{GDS_BUTTON_GRADIENT_TEXT_FLOOR.fontSizePx}px / {GDS_BUTTON_GRADIENT_TEXT_FLOOR.fontWeight} label floor</Badge>
+        </Group>
+        <Text size="sm">
+          Two brand treatments the inline brand-variant map cannot express — an accent-as-outline
+          action (transparent fill, accent stroke and label) and the reserved Scout AI gradient
+          action (a solid fill where the active preset declares no <code>ai</code> lane). Hover
+          and press either &quot;Save&quot; button to see the stylesheet-driven wash/deepen and
+          brightness states; the &quot;Delete&quot; button fires the same transient error
+          treatment as above, which fully replaces the intent&apos;s own paint for its duration.
+          The third and fourth buttons in each row are the loading and disabled states.
+        </Text>
+        <Stack gap="xs">
+          {brandIntentDemos.map((demo) => (
+            <Group key={demo.variant} gap="sm" align="center" wrap="wrap">
+              <Box miw={110}>
+                <Text size="xs" c="dimmed" ff="monospace">{demo.label}</Text>
+              </Box>
+              <BrandIntentDemo variant={demo.variant} />
+            </Group>
+          ))}
+        </Stack>
       </Stack>
     </Stack>
   );

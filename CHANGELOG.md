@@ -2,7 +2,55 @@
 
 All notable policy changes to the General Design System are recorded here.
 
-## Unreleased — A governed activity pictogram family, a generated brand badge, an element-level opt-out from the theme-preset repaint, a layout axis, a logo lockup / notification bell / compare button, detail-page facts / provider-claim surfaces, the trust-layer component family, sidebar/pin elevation roles with validated tracking and italic typography inputs, and a reserved Scout AI sub-brand accent lane (#708, #699, #724, #698, #710, #713, #711, #709, #695, #697)
+## Unreleased — A governed activity pictogram family, a generated brand badge, an element-level opt-out from the theme-preset repaint, a layout axis, a logo lockup / notification bell / compare button, detail-page facts / provider-claim surfaces, the trust-layer component family, sidebar/pin elevation roles with validated tracking and italic typography inputs, a reserved Scout AI sub-brand accent lane, and two new SemanticButton brand intents for it (#708, #699, #724, #698, #710, #713, #711, #709, #695, #697, #700)
+
+### Two new SemanticButton brand intents: `outline-accent` and `gradient` (#700)
+
+`SemanticButton`'s `brandVariant` gains two values carrying the full micro-action state axis
+(hover, pressed, focus, disabled, loading, transient feedback): `outline-accent` (transparent
+fill, 1.5px accent stroke and label) and `gradient` (the reserved Scout AI gradient fill from
+#697, layered over a solid primary-chain fallback where a preset declares no `ai` lane). The
+four pre-existing `brandVariant` values, and the `primary`/`secondary`/`subtle`/`danger`
+vocabulary, are unchanged.
+
+Both intents' resting paint carries no inline style — a stylesheet `:hover`/`:active` rule
+cannot override an inline style without `!important` — so their entire state axis lives in
+`packages/gds-theme/styles.css`, keyed on the existing `data-gds-brand-button` attribute. The
+governed button repaint rule (and its class-usa/gold-athlete/cosmic/preview-surface variants)
+now explicitly excludes both new intents rather than relying on selector-specificity accidents.
+A transient success/error feedback treatment on either intent works by `SemanticButton`
+withholding that attribute for the duration, handing the cascade to the existing governed
+success/danger button rules — no second timing constant, no parallel mechanism;
+`GDS_BUTTON_FEEDBACK_DURATION_MS` and its timer are reused unchanged. New exports:
+`GDS_BUTTON_GRADIENT_TEXT_FLOOR` (`{ fontSizePx: 14, fontWeight: 600 }`, since white on the
+Scout orange fill clears only the 3:1 non-text threshold — applied directly in the `gradient`
+intent's stylesheet rule, not left to whatever `size` a caller passes) and
+`GDS_BUTTON_OUTLINE_ACCENT_STROKE_PX` (`1.5`). `SemanticButton` now also sets `aria-busy` while
+loading and announces a transient feedback label change via a polite live region, for every
+brand intent.
+
+`outline-accent` reuses the same `--gds-brand-accent-action` chain the existing `accent` fill
+already uses for its rest-state stroke/label — not a new "accent pressed" token, which does not
+exist and which this issue's Non-Goals forbid inventing — deriving pressed as a `color-mix`
+darken of that same value, the same technique the hover wash already uses.
+
+`gradient` widens the `ai.*` reserved-usage contract (THEME_GOVERNANCE.md, issue #697):
+`SemanticButton`'s `gradient` intent is now the one brand intent sanctioned to consume
+`ai.gradient`, exclusively for AI-identity CTAs (e.g. "Ask Scout AI") — every other intent,
+link, badge, and non-AI control still keeps the preset's primary/accent roles.
+`scripts/verify-ai-reserved-usage.mjs`'s allowlist gained a per-line-content entry (not a
+whole-file exemption) for the one new rule in `packages/gds-theme/styles.css` that consumes it,
+so an unrelated `--gds-ai-*` reference anywhere else in that file still fails the gate.
+
+`outline-accent`'s accent-as-label-text pairing is measured by a new report-severity
+accessibility-floor rule, `outline-accent-text-contrast` (`--gds-brand-accent-action` against
+`--gds-bg-page`): every light-scheme value clears 4.5:1, but 25 of 27 dark-scheme values do
+not, because the generic derivation path ensures that role's contrast against `canvasLight`
+only and reuses the same value unchanged in dark mode — a real, pre-existing gap, printed every
+run, not silently enforced away. This is deliberately *not* the same thing as flipping
+`accent-axis.ts`'s unrelated `GDS_ACCENT_MODE_ENFORCEMENT.outline` entry, which governs a
+different, categorical ten-name accent ramp (`GdsIconBadge`'s) and which measured to 1080 real,
+pre-existing failures unrelated to this issue's scope — see THEME_GOVERNANCE.md.
 
 ### A reserved Scout AI sub-brand accent lane (#697)
 
