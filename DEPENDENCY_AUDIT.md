@@ -142,3 +142,4 @@ deprecation notice appears (`staleness.deprecatedPackages` non-empty).
 ## Resolved During 3.0.7
 
 - `vitest` was upgraded from `3.2.4` to `4.1.8`, resolving GHSA-5xrq-8626-4rwp for the local test runner.
+
