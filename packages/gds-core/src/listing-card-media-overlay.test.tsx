@@ -54,4 +54,18 @@ describe('ListingCard media overlays (issue 679)', () => {
     const overlaid = renderCard({ title: 'Go Padel', mediaOverlay: <span>Outdoor</span> });
     expect(countRelative(overlaid.container)).toBe(before + 1);
   });
+
+  // Extended for issue 701: the pick badge is a third overlay/badge trigger for the same
+  // positioned wrapper, on its own, with no mediaOverlay/mediaAffordance present.
+  it('adds the positioned wrapper for pickBadge alone too', () => {
+    const countRelative = (c: HTMLElement) =>
+      [...c.querySelectorAll('div')].filter((el) => (el as HTMLElement).style.position === 'relative').length;
+
+    const plain = renderCard({ title: 'Go Padel' });
+    const before = countRelative(plain.container);
+    plain.unmount();
+
+    const picked = renderCard({ title: 'Go Padel', pickBadge: true });
+    expect(countRelative(picked.container)).toBe(before + 1);
+  });
 });

@@ -236,6 +236,8 @@ export const es = {
   'gds.gdsSchemaForm.submitLabel': "Entregar",
   'gds.layoutTemplatePreview.title': "Libro de recetas de plantilla",
   'gds.layoutTemplatePreview.description': "Elija una plantilla, edite JSON y luego aplíquela para obtener una vista previa de los diagnósticos en vivo y el diseño renderizado.",
+  'gds.listingCard.featuredLabel': "Destacado",
+  'gds.listingCard.pickLabel': "Selección",
   'gds.listingCard.ratingLabel': "Clasificación",
   'gds.listingCard.reasonLabel': "¿Por qué esto encaja?",
   'gds.listingPrimitives.emptyLabel': "Sin filtros activos.",

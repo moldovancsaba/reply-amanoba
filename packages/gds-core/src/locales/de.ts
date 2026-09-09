@@ -236,6 +236,8 @@ export const de = {
   'gds.gdsSchemaForm.submitLabel': "Einreichen",
   'gds.layoutTemplatePreview.title': "Vorlage für ein Kochbuch",
   'gds.layoutTemplatePreview.description': "Wählen Sie eine Vorlage aus, bearbeiten Sie JSON und wenden Sie sie dann an, um eine Vorschau der Live-Diagnose und des gerenderten Layouts anzuzeigen.",
+  'gds.listingCard.featuredLabel': "Empfohlen",
+  'gds.listingCard.pickLabel': "Auswahl",
   'gds.listingCard.ratingLabel': "Bewertung",
   'gds.listingCard.reasonLabel': "Warum das passt",
   'gds.listingPrimitives.emptyLabel': "Keine aktiven Filter.",

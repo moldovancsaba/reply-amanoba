@@ -3,7 +3,7 @@
     "site": [
       {
         "locale": "de",
-        "total": 2116,
+        "total": 2120,
         "leaked": 3,
         "rate": 0.14,
         "budget": 3,
@@ -15,7 +15,7 @@
       },
       {
         "locale": "ar",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -23,7 +23,7 @@
       },
       {
         "locale": "es",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -31,7 +31,7 @@
       },
       {
         "locale": "fr",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -39,7 +39,7 @@
       },
       {
         "locale": "he",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -47,7 +47,7 @@
       },
       {
         "locale": "hu",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -55,7 +55,7 @@
       },
       {
         "locale": "it",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -63,7 +63,7 @@
       },
       {
         "locale": "ja",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -71,7 +71,7 @@
       },
       {
         "locale": "ko",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -79,7 +79,7 @@
       },
       {
         "locale": "ru",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -87,7 +87,7 @@
       },
       {
         "locale": "zh",
-        "total": 2116,
+        "total": 2120,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -97,7 +97,7 @@
     "package": [
       {
         "locale": "ar",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -105,7 +105,7 @@
       },
       {
         "locale": "de",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -113,7 +113,7 @@
       },
       {
         "locale": "es",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -121,7 +121,7 @@
       },
       {
         "locale": "fr",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -129,7 +129,7 @@
       },
       {
         "locale": "he",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -137,7 +137,7 @@
       },
       {
         "locale": "hu",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -145,7 +145,7 @@
       },
       {
         "locale": "it",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -153,7 +153,7 @@
       },
       {
         "locale": "ja",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -161,7 +161,7 @@
       },
       {
         "locale": "ko",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -169,7 +169,7 @@
       },
       {
         "locale": "ru",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,
@@ -177,7 +177,7 @@
       },
       {
         "locale": "zh",
-        "total": 329,
+        "total": 331,
         "leaked": 0,
         "rate": 0,
         "budget": 0,

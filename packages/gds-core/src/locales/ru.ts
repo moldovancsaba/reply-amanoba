@@ -236,6 +236,8 @@ export const ru = {
   'gds.gdsSchemaForm.submitLabel': "Представлять на рассмотрение",
   'gds.layoutTemplatePreview.title': "Шаблон кулинарной книги",
   'gds.layoutTemplatePreview.description': "Выберите шаблон, отредактируйте JSON, а затем примените его для предварительного просмотра интерактивной диагностики и визуализированного макета.",
+  'gds.listingCard.featuredLabel': "Рекомендуем",
+  'gds.listingCard.pickLabel': "Выбор",
   'gds.listingCard.ratingLabel': "Рейтинг",
   'gds.listingCard.reasonLabel': "Почему это подходит",
   'gds.listingPrimitives.emptyLabel': "Никаких активных фильтров.",

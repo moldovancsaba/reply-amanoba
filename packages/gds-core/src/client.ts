@@ -54,6 +54,7 @@ export * from './AsyncSurface';
 export * from './DataToolbar';
 export * from './ListingPrimitives';
 export * from './ListingState.client';
+export * from './BrowseSelection.client';
 export * from './PublicShell';
 export * from './DiscoveryShell';
 export * from './DocsShell';

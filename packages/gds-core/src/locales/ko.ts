@@ -236,6 +236,8 @@ export const ko = {
   'gds.gdsSchemaForm.submitLabel': "제출하다",
   'gds.layoutTemplatePreview.title': "템플릿 요리책",
   'gds.layoutTemplatePreview.description': "템플릿을 선택하고 JSON을 편집한 다음 실시간 진단 및 렌더링된 레이아웃을 미리 보려면 적용하세요.",
+  'gds.listingCard.featuredLabel': "추천",
+  'gds.listingCard.pickLabel': "픽",
   'gds.listingCard.ratingLabel': "평가",
   'gds.listingCard.reasonLabel': "이것이 적합한 이유",
   'gds.listingPrimitives.emptyLabel': "활성 필터가 없습니다.",

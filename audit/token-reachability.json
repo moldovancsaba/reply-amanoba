@@ -1,7 +1,7 @@
 {
   "declared": 311,
-  "referenced": 124,
-  "extensionPoints": 135,
+  "referenced": 128,
+  "extensionPoints": 134,
   "pendingWireUp": 0,
   "unreachableCount": 0,
   "budget": 0,
@@ -778,13 +778,6 @@
     },
     {
       "token": "--gds-radius-surface",
-      "classification": "extension-point",
-      "reason": "Shape-axis role token (issue 555). Emitted for every preset so a consumer or a future GDS component can read it; the axis guarantees presence, not consumption.",
-      "reviewBy": "2027-08-01",
-      "declaredIn": "getGdsVibeThemeCssVariables"
-    },
-    {
-      "token": "--gds-radius-thumbnail",
       "classification": "extension-point",
       "reason": "Shape-axis role token (issue 555). Emitted for every preset so a consumer or a future GDS component can read it; the axis guarantees presence, not consumption.",
       "reviewBy": "2027-08-01",

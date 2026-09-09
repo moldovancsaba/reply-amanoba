@@ -2,7 +2,7 @@
 
 Status: Active SSOT
 Version: 6.7.0
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 This document defines the canonical behavior for UI components, workflows, and responsive layouts. Adopting projects may not alter interaction meanings or bypass these required UX patterns.
 
@@ -64,6 +64,7 @@ The official website must also consume these contracts directly. `apps/playgroun
 | **Metric Cards** | Prominent value, readable label, optional trend/status. Analytics may not outrank next action or urgent exceptions on mobile. | `md` |
 | **Data Toolbars** | Search, filters, sort, reset, and create actions in predictable order. Active filters visible and removable. | `md` |
 | **Listing State Contract** | Listing flows should use `ListingProvider` + `useListingState` with `SortMenu`, `ResultSummary`, `ActiveFilterChips`, and `BulkActionsBar` so search/sort/filter/page/selection stay in one governed runtime lane. | `md` |
+| **Browse Selection Contract** | Browse split views (a listing card list beside a map) should use `useGdsBrowseSelection` (issue 701) instead of a per-consumer selection sync: one hook instance's `selectedId`/`isSelected`/`select`/`toggle`/`clear` drive both a `ListingCard`'s `selected` ring and a `GdsMapPinBadge`'s `state="selected"` from the same id. Controlled (`selectedId`/`onChange`) or uncontrolled (`defaultSelectedId`); a separate, complementary mechanism from `ListingProvider`'s multi-row bulk-action `selection`. | `md` |
 | **Form Validation Contract** | Form-heavy flows should use `useGdsForm` plus `FormErrorSummary`/`ValidatedFieldMessage` so touched/dirty/async validation/submit states stay deterministic. | `md` |
 | **Rich Text Editor** | Content-editing surfaces (e.g. inside `ContentOpsEditor`) should use `GdsRichTextEditor` (Tiptap-backed) for the actual text-editing region — never a hand-rolled `contentEditable`. Import it from the dedicated `@sovereignsquad/gds-core/rich-text-editor` subpath, not the main package entry, so its larger Content-engine dependency stays opt-in for consumers who don't use it. | `md` |
 | **Reporting Contracts** | Reporting-heavy workflows must use governed period controls, evidence/source panels, chart-token wrappers, text summaries, and table fallbacks. | `lg` |
@@ -76,7 +77,7 @@ The official website must also consume these contracts directly. `apps/playgroun
 | **Sidebar Navigation** | Sectioned sidebar IA with labels, active-route signaling, semantic icons/labels, and consistent row spacing. | `md` |
 | **Breadcrumbs** | Use `GdsBreadcrumbs` — a standalone, independently reusable breadcrumb trail (labeled `nav` landmark; the last item always renders as the non-link current page, even if it carries an `href`). `DocsPageShell` uses it internally; use it directly anywhere else a breadcrumb trail is needed instead of importing `@mantine/core`'s `Breadcrumbs` directly. | `md` |
 | **Action Bar** | Semantic action orchestration for primary, secondary, tertiary, and icon-only actions with governed responsive wrapping. | `md` |
-| **Listing Card** | Unified discovery/listing card for events, venues, communities, and similar public objects with media, metadata, disclosure, and save/share affordances. Use `size`, `density`, and `variant` for governed layouts; do not create event/venue/community-specific card wrappers. | `md` |
+| **Listing Card** | Unified discovery/listing card for events, venues, communities, and similar public objects with media, metadata, disclosure, and save/share affordances. Use `size`, `density`, and `variant` for governed layouts; do not create event/venue/community-specific card wrappers. `featured`/`selected` render an identical ring surface treatment (1px accent border, featured ring, elevated shadow) — never a hover-lift; the governed `pickBadge` prop overlays a star-plus-label pill on a dark scrim inside the media tile; the `media-left` variant now renders a fixed 96×96 `thumbnail`-radius row tile (issue 701). | `md` |
 | **Share Button Group** | Governed public sharing contract with native share, copy-link, and channel buttons instead of product-local share wrappers. | `md` |
 | **Public Food Card** | Food/menu card for dishes, bundles, bakery drops, and FMCG seasonal sets with governed freshness, pickup, scarcity, and action semantics. Card size and density must come from the shared card contract. | `md` |
 | **Food Menu Section** | Grouped weekly or category-based food/menu composition built on the canonical food-card contract. | `lg` |
@@ -176,7 +177,7 @@ The following families are mandatory local contracts when a project has the corr
 | **DiscoveryShell** | Product has sidebar-first explore, catalog, directory, dashboard, or workspace surfaces | header/sidebar/main contract, mobile collapse, sticky sidebar, chrome spacing |
 | **Page Header** | Product has more than one page | title, purpose text, primary action, secondary action placement |
 | **Product Card** | Product lists courses, providers, children, records, articles, accounts, or other repeated objects | content slots, action slots, mobile order, loading/empty behavior |
-| **Listing Card** | Product lists public discovery objects such as events, venues, communities, clubs, or offers | media ratio, disclosure, metadata rows, save/share/cta affordances |
+| **Listing Card** | Product lists public discovery objects such as events, venues, communities, clubs, or offers | media ratio, disclosure, metadata rows, save/share/cta affordances, featured/selected ring, pick badge |
 | **Public Food Card** | Product lists dishes, prepared meals, bakery drops, bundles, or seasonal food sets | food-oriented price hierarchy, freshness/pickup/scarcity helper text, menu-specific states |
 | **Food Menu Section** | Product presents grouped weekly menus, category menus, or preorder collections | grouped headings, section notes, category helper notes, governed item grids, empty menu handling |
 | **Public Product Card** | Product has media-first menu, catalog, offer, or discovery cards | image treatment, price/helper hierarchy, availability states, localized helper labels, one mobile primary action, missing-image/loading behavior |

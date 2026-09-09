@@ -236,6 +236,8 @@ export const ja = {
   'gds.gdsSchemaForm.submitLabel': "提出する",
   'gds.layoutTemplatePreview.title': "テンプレート クックブック",
   'gds.layoutTemplatePreview.description': "テンプレートを選択し、JSON を編集して、ライブ診断とレンダリングされたレイアウトをプレビューに適用します。",
+  'gds.listingCard.featuredLabel': "注目",
+  'gds.listingCard.pickLabel': "ピック",
   'gds.listingCard.ratingLabel': "評価",
   'gds.listingCard.reasonLabel': "なぜこれが当てはまるのか",
   'gds.listingPrimitives.emptyLabel': "アクティブなフィルターはありません。",

@@ -2,7 +2,40 @@
 
 All notable policy changes to the General Design System are recorded here.
 
-## Unreleased — A governed activity pictogram family, a generated brand badge, an element-level opt-out from the theme-preset repaint, a layout axis, a logo lockup / notification bell / compare button, detail-page facts / provider-claim surfaces, the trust-layer component family, sidebar/pin elevation roles with validated tracking and italic typography inputs, a reserved Scout AI sub-brand accent lane, and two new SemanticButton brand intents for it (#708, #699, #724, #698, #710, #713, #711, #709, #695, #697, #700)
+## Unreleased — A governed activity pictogram family, a generated brand badge, an element-level opt-out from the theme-preset repaint, a layout axis, a logo lockup / notification bell / compare button, detail-page facts / provider-claim surfaces, the trust-layer component family, sidebar/pin elevation roles with validated tracking and italic typography inputs, a reserved Scout AI sub-brand accent lane, two new SemanticButton brand intents for it, and a ListingCard featured/selected ring with a pick badge, a row tile, and a browse-selection hook (#708, #699, #724, #698, #710, #713, #711, #709, #695, #697, #700, #701)
+
+### `ListingCard` featured/selected ring, a pick badge, a media-left row tile, and `useGdsBrowseSelection` (#701)
+
+`ListingCard` gains a `selected` prop rendering the identical ring surface treatment as
+`featured` — a 1px accent border, a featured ring, and the elevated shadow — with no hover-lift
+in any state: selection reads as a persistent ring, never a transient transform. Both props set
+`data-gds-listing-featured`/`data-gds-listing-selected`; `selected` also sets
+`aria-current="true"` when `interactiveMode` is `'surface-link'`.
+
+A governed `pickBadge` prop (`true`, or `{ label, ariaLabel }`) renders a "Pick" overlay badge —
+a star glyph and localized label on a dark scrim pill — inside the media tile's inline-start/top
+corner, over both a supplied `image` and the generated fallback thumbnail, stacking
+deterministically with the existing `mediaOverlay` slot (issue 679) and leaving
+`mediaAffordance` unaffected. New exported geometry constants (`GDS_LISTING_TILE_SIZE_PX`,
+`GDS_LISTING_PICK_BADGE_INSET_PX`, and the badge's icon/type/padding constants) are
+reference-derived from the Your Field v3 `ProgramListCard` and follow the `GDS_PIN_*` precedent
+in `GdsMapPinBadge`.
+
+The card contract's `mediaPlacement` (previously resolved but unconsumed) now drives a fixed
+96×96 row-tile media form for the `media-left` variant, using the existing `thumbnail` radius
+role; the top-media form is unchanged.
+
+A new `useGdsBrowseSelection` hook (`packages/gds-core/src/BrowseSelection.client.ts`) provides
+single-selection state, controlled or uncontrolled, shareable between a `ListingCard` list and a
+set of `GdsMapPinBadge` pins in a browse split view — one id drives both the selected card's
+ring and the matching pin's `state="selected"`, so a "selected card = selected pin" browse
+experience no longer means every consumer reinventing the sync.
+
+Two pre-existing defects in the `featured` badge are also fixed, visibly: the label was a
+hardcoded English `"Featured"` string (now localized via `gds.listingCard.featuredLabel`), and
+its color came from Mantine's raw `color="violet"` (now the same accent tint token pair the
+card's active affordance state already uses). Cards using none of the new props render DOM
+identical to 6.7.0 aside from these two fixes.
 
 ### Two new SemanticButton brand intents: `outline-accent` and `gradient` (#700)
 

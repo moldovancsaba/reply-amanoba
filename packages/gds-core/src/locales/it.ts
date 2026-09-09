@@ -236,6 +236,8 @@ export const it = {
   'gds.gdsSchemaForm.submitLabel': "Invia",
   'gds.layoutTemplatePreview.title': "Modello di ricettario",
   'gds.layoutTemplatePreview.description': "Scegli un modello, modifica JSON, quindi applicalo per visualizzare in anteprima la diagnostica in tempo reale e il layout renderizzato.",
+  'gds.listingCard.featuredLabel': "In evidenza",
+  'gds.listingCard.pickLabel': "Selezione",
   'gds.listingCard.ratingLabel': "Valutazione",
   'gds.listingCard.reasonLabel': "Perché questo si adatta",
   'gds.listingPrimitives.emptyLabel': "Nessun filtro attivo.",

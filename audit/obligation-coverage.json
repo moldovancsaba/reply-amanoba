@@ -1,10 +1,10 @@
 {
-  "evaluated": 1239,
+  "evaluated": 1241,
   "gapCount": 355,
   "excludedCount": 80,
   "byKind": {
     "prop": {
-      "evaluated": 1122,
+      "evaluated": 1124,
       "gaps": 318
     },
     "variant": {
@@ -2390,7 +2390,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2404,7 +2404,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2418,7 +2418,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2432,7 +2432,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2446,7 +2446,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2460,7 +2460,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2474,7 +2474,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2488,7 +2488,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2502,7 +2502,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2516,7 +2516,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2530,7 +2530,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2544,7 +2544,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2558,7 +2558,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2572,7 +2572,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2586,7 +2586,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2600,7 +2600,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2614,7 +2614,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2628,7 +2628,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2642,7 +2642,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2656,7 +2656,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2670,7 +2670,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2684,7 +2684,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2698,7 +2698,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
@@ -2712,7 +2712,7 @@
       "kind": "prop",
       "source": {
         "file": "packages/gds-core/src/ListingCard.tsx",
-        "line": 39
+        "line": 47
       },
       "unmet": [
         {
