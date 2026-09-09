@@ -236,6 +236,8 @@ export const zh = {
   'gds.gdsSchemaForm.submitLabel': "提交",
   'gds.layoutTemplatePreview.title': "模板食谱",
   'gds.layoutTemplatePreview.description': "选择一个模板，编辑 JSON，然后应用以预览实时诊断和呈现的布局。",
+  'gds.listingCard.featuredLabel': "精选",
+  'gds.listingCard.pickLabel': "优选",
   'gds.listingCard.ratingLabel': "等级",
   'gds.listingCard.reasonLabel': "为什么这适合",
   'gds.listingPrimitives.emptyLabel': "无有源滤波器。",

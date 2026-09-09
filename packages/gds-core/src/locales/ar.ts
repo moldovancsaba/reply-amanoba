@@ -236,6 +236,8 @@ export const ar = {
   'gds.gdsSchemaForm.submitLabel': "يُقدِّم",
   'gds.layoutTemplatePreview.title': "كتاب الطبخ النموذجي",
   'gds.layoutTemplatePreview.description': "اختر قالبًا، وقم بتحرير JSON، ثم قم بتطبيقه لمعاينة التشخيصات المباشرة والتخطيط المعروض.",
+  'gds.listingCard.featuredLabel': "مميز",
+  'gds.listingCard.pickLabel': "اختيار",
   'gds.listingCard.ratingLabel': "تصنيف",
   'gds.listingCard.reasonLabel': "لماذا يناسب هذا",
   'gds.listingPrimitives.emptyLabel': "لا يوجد مرشحات نشطة.",

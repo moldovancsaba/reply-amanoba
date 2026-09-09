@@ -236,6 +236,8 @@ export const hu = {
   'gds.gdsSchemaForm.submitLabel': "Beküld",
   'gds.layoutTemplatePreview.title': "Szakácskönyv sablon",
   'gds.layoutTemplatePreview.description': "Válasszon ki egy sablont, szerkessze a JSON-t, majd alkalmazza az élő diagnosztika és a megjelenített elrendezés előnézetéhez.",
+  'gds.listingCard.featuredLabel': "Kiemelt",
+  'gds.listingCard.pickLabel': "Válogatott",
   'gds.listingCard.ratingLabel': "Értékelés",
   'gds.listingCard.reasonLabel': "Miért illik ez",
   'gds.listingPrimitives.emptyLabel': "Nincsenek aktív szűrők.",

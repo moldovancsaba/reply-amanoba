@@ -236,6 +236,8 @@ export const he = {
   'gds.gdsSchemaForm.submitLabel': "לְהַגִישׁ",
   'gds.layoutTemplatePreview.title': "ספר בישול לתבנית",
   'gds.layoutTemplatePreview.description': "בחר תבנית, ערוך את JSON ולאחר מכן החל לתצוגה מקדימה של אבחון חי והפריסה המעובדת.",
+  'gds.listingCard.featuredLabel': "מומלץ",
+  'gds.listingCard.pickLabel': "נבחר",
   'gds.listingCard.ratingLabel': "דֵרוּג",
   'gds.listingCard.reasonLabel': "למה זה מתאים",
   'gds.listingPrimitives.emptyLabel': "אין מסננים פעילים.",

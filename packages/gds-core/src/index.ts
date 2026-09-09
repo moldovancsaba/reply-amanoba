@@ -88,6 +88,7 @@ export * from './FoodMenuSection';
 export * from './ListingCard';
 export * from './ListingPrimitives';
 export * from './ListingState.client';
+export * from './BrowseSelection.client';
 export * from './DetailProfileShell';
 export * from './DetailFactsTable';
 export * from './ProviderCTA';

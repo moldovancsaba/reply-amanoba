@@ -236,6 +236,8 @@ export const fr = {
   'gds.gdsSchemaForm.submitLabel': "Soumettre",
   'gds.layoutTemplatePreview.title': "Modèle de livre de recettes",
   'gds.layoutTemplatePreview.description': "Choisissez un modèle, modifiez JSON, puis appliquez-le pour prévisualiser les diagnostics en direct et la mise en page rendue.",
+  'gds.listingCard.featuredLabel': "En vedette",
+  'gds.listingCard.pickLabel': "Sélection",
   'gds.listingCard.ratingLabel': "Notation",
   'gds.listingCard.reasonLabel': "Pourquoi cela convient",
   'gds.listingPrimitives.emptyLabel': "Aucun filtre actif.",

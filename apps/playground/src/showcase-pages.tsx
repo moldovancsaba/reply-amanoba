@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   AccessSummary,
   ActionBar,
+  AsyncSurface,
   AuthShell,
   BodyText,
   BoundedPreviewSurface,
@@ -15,7 +16,9 @@ import {
   GdsChart,
   GdsCluster,
   GdsGeneratedThumbnail,
+  GdsInline,
   GdsInlineLink,
+  GdsMapPinBadge,
   GdsStack,
   ListingCard,
   MapPanel,
@@ -38,7 +41,9 @@ import {
   ProviderIdentityButtonGroup,
   StatsSection,
   GdsLayoutTemplatePreview,
+  useGdsBrowseSelection,
 } from '@sovereignsquad/gds-core';
+import type { AsyncSurfaceState } from '@sovereignsquad/gds-core';
 import { DataTable, PageHeader, ResponsiveDataView } from '@sovereignsquad/gds-admin';
 import { patternRegistry } from './pattern-registry';
 import { SiteTourLauncher } from './SiteTourLauncher';
@@ -50,6 +55,94 @@ function DemoFooter() {
     <p>
       Need something missing? <GdsInlineLink href="mailto:moldovancsaba+general.design.system@gmail.com">Request a feature</GdsInlineLink>.
     </p>
+  );
+}
+
+// Reuses the pin-system reference's own fixture identities (label/summary/accent/icon) verbatim
+// rather than inventing new copy: same three places, already governed and already translated.
+const BROWSE_SELECTION_LISTINGS: Array<{
+  id: string;
+  title: string;
+  description: string;
+  accent: 'ocean' | 'teal' | 'grape';
+  icon: 'Location' | 'Habit' | 'Message';
+}> = [
+  { id: 'pool', title: 'Community pool', description: 'Heated pools with beginner lanes and family sessions.', accent: 'ocean', icon: 'Location' },
+  { id: 'studio', title: 'Dance studio', description: 'Ballet and street classes with end-of-term showcases.', accent: 'teal', icon: 'Habit' },
+  { id: 'hall', title: 'Riverside hall', description: 'Choir and ensemble sessions in a riverside hall.', accent: 'grape', icon: 'Message' },
+];
+
+// Labels reuse AsyncSurface's own governed default titles (already localized package-side)
+// rather than restating "empty"/"error" as new site copy.
+const BROWSE_SURFACE_STATE_OPTIONS: Array<{ value: AsyncSurfaceState; label: string }> = [
+  { value: 'loading', label: 'Loading' },
+  { value: 'empty', label: 'No results' },
+  { value: 'error', label: 'Unable to load' },
+  { value: 'success', label: 'Success' },
+];
+
+/**
+ * Live proof for `useGdsBrowseSelection`: one hook instance shared between a `ListingCard` list
+ * (media-left row tiles) and a set of `GdsMapPinBadge` pins, so selecting either half selects
+ * both from the same id — no per-consumer sync code. The surface-state switcher exercises the
+ * loading/empty/error/success contract `AsyncSurface` already governs (issue 701).
+ */
+function CardPinSelectionDemo() {
+  const browse = useGdsBrowseSelection({ defaultSelectedId: BROWSE_SELECTION_LISTINGS[0].id });
+  const [surfaceState, setSurfaceState] = useState<AsyncSurfaceState>('success');
+
+  return (
+    <GdsStack gap="md">
+      <GdsSegmentedControl
+        value={surfaceState}
+        onChange={setSurfaceState}
+        ariaLabel="Browse surface state"
+        options={BROWSE_SURFACE_STATE_OPTIONS}
+      />
+      <AsyncSurface
+        state={surfaceState}
+        onRetry={() => setSurfaceState('success')}
+        successContent={
+          <GdsStack gap="md">
+            <GdsStack gap="sm">
+              {BROWSE_SELECTION_LISTINGS.map((listing) => (
+                <ListingCard
+                  key={listing.id}
+                  title={listing.title}
+                  description={listing.description}
+                  variant="media-left"
+                  size="sm"
+                  density="compact"
+                  mediaSeed={listing.id}
+                  selected={browse.isSelected(listing.id)}
+                  interactiveMode="surface-button"
+                  onSurfaceActivate={() => browse.toggle(listing.id)}
+                />
+              ))}
+            </GdsStack>
+            <GdsInline gap="md" wrap="wrap">
+              {BROWSE_SELECTION_LISTINGS.map((listing) => (
+                <button
+                  key={listing.id}
+                  type="button"
+                  aria-label={listing.title}
+                  aria-pressed={browse.isSelected(listing.id)}
+                  onClick={() => browse.toggle(listing.id)}
+                >
+                  <GdsMapPinBadge
+                    accent={listing.accent}
+                    icon={listing.icon}
+                    label={listing.title}
+                    filled
+                    state={browse.isSelected(listing.id) ? 'selected' : 'idle'}
+                  />
+                </button>
+              ))}
+            </GdsInline>
+          </GdsStack>
+        }
+      />
+    </GdsStack>
   );
 }
 
@@ -164,6 +257,7 @@ export function CardsPage() {
           title="Danube Sunset Run"
           description="A public discovery card with featured treatment, governed metadata rows, and clear save/share affordances."
           featured
+          pickBadge
           sponsoredDisclosure="Sponsored placement. Selection criteria belong to the host product."
           price="Free"
           metadata={[
@@ -175,6 +269,13 @@ export function CardsPage() {
           shareAction={{ action: 'refer' }}
           primaryAction={<GdsInlineLink href="/general-design-system/live-proofs/surfaces">Open listing</GdsInlineLink>}
         />
+      </ReferenceSection>
+
+      <ReferenceSection
+        title="Card and pin selection sync"
+        description="One useGdsBrowseSelection instance drives both halves of a browse split view: select a card or its pin and the other follows."
+      >
+        <CardPinSelectionDemo />
       </ReferenceSection>
 
       <ReferenceSection title="Food surfaces" description="Food and menu contracts are first-class public surfaces, not downstream product exceptions.">

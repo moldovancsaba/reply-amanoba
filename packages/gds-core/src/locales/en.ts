@@ -236,6 +236,8 @@ export const en = {
   'gds.gdsSchemaForm.submitLabel': "Submit",
   'gds.layoutTemplatePreview.title': "Template cookbook",
   'gds.layoutTemplatePreview.description': "Pick a template, edit JSON, then apply to preview live diagnostics and rendered layout.",
+  'gds.listingCard.featuredLabel': "Featured",
+  'gds.listingCard.pickLabel': "Pick",
   'gds.listingCard.ratingLabel': "Rating",
   'gds.listingCard.reasonLabel': "Why this fits",
   'gds.listingPrimitives.emptyLabel': "No active filters.",
