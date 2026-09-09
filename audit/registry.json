@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "commit": "4af132b0294f4a9ecc6d19cf2b9288c2fb9b26dc",
+  "commit": "8c74208d184626d40bf199a3471016550149b5d7",
   "counts": {
     "token-published": 522,
     "token-declared": 59,
@@ -7417,7 +7417,7 @@
       "name": "--gds-layout-sidebar-width",
       "source": {
         "file": "packages/gds-core/src/core.test.tsx",
-        "line": 1896
+        "line": 1907
       }
     },
     {
@@ -7426,7 +7426,7 @@
       "name": "--gds-layout-header-height",
       "source": {
         "file": "packages/gds-core/src/core.test.tsx",
-        "line": 1897
+        "line": 1908
       }
     },
     {
@@ -7435,7 +7435,7 @@
       "name": "--gds-badge-soft-warning",
       "source": {
         "file": "packages/gds-core/src/core.test.tsx",
-        "line": 3254
+        "line": 3265
       }
     },
     {
@@ -7444,7 +7444,7 @@
       "name": "--gds-badge-soft-warning-fg",
       "source": {
         "file": "packages/gds-core/src/core.test.tsx",
-        "line": 3255
+        "line": 3266
       }
     },
     {
