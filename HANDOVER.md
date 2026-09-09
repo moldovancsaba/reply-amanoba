@@ -1,7 +1,10 @@
 # HANDOVER
 
-**Written 2026-09-07. Supersedes every earlier handover (including the 2026-08-16/17 one
-about the 6.2.0 publish, now fully stale — that work is long done and merged).**
+**Originally written 2026-09-07; corrected 2026-09-09** after an accuracy audit found the
+state below had drifted (PR #738 merged in the meantime, plus several errors present since the
+original writing — CI-run identity, a wrong source file, a misstated budget rule, and others).
+**Supersedes every earlier handover (including the 2026-08-16/17 one about the 6.2.0 publish,
+now fully stale — that work is long done and merged).**
 
 Read this top to bottom before touching anything. It is written for an agent with **no
 memory of the session that produced this state**.
@@ -10,37 +13,47 @@ memory of the session that produced this state**.
 
 ## 1. Where we are, in one paragraph
 
-`main` is at **`8595d0d`**, version **6.7.0** (unreleased — `VERSION` has not been bumped for
-6.8.0 yet; that happens once the whole milestone below ships). `dev`, `origin/dev`, and
-`origin/main` are all identical to `main` at `8595d0d` — fully synced, clean tree, nothing
-pending, confirmed by direct `git rev-parse` comparison of all four.
+`main`, `dev`, `origin/main`, and `origin/dev` are all identical at **`bdf6008`** (confirmed by
+direct `git rev-parse` comparison of all four), version **6.7.0** (unreleased — `VERSION` has
+not been bumped for 6.8.0 yet; that happens once the whole milestone below ships).
+**The working tree is NOT clean right now**: a separate, in-flight session has 41 files staged
+(uncommitted) implementing issue #701 — `packages/gds-core/src/ListingCard.tsx`, a new
+`BrowseSelection.client.ts`, the `gds-core` barrel (`index.ts`/`client.ts`), all 12 locale
+files, and 8 regenerated `audit/*.json` artifacts. **Do not start a new issue until #701 is
+committed, preflighted, pushed, and merged (or explicitly abandoned)** — starting fresh work on
+top of that staged set risks exactly the file collisions CLAUDE.md Rule 13's clean-tree
+requirement exists to prevent (a new issue touching the same barrel/locales/audit files would
+conflict at commit time).
 
-**[PR #736](https://github.com/sovereignsquad/general-design-system/pull/736) (#697 + the
-HANDOVER.md rewrite) is MERGED, and issue #697 is CLOSED** (confirmed via `gh issue view 697
---json state,closedAt`: `CLOSED`, `2026-09-07T18:34:55Z`). Its CI history is worth knowing
-about even though it's resolved: the **first** run
-(`https://github.com/sovereignsquad/general-design-system/actions/runs/34149880005`) had
+**[PR #736](https://github.com/sovereignsquad/general-design-system/pull/736) (#697) and
+[PR #738](https://github.com/sovereignsquad/general-design-system/pull/738) (#700) are both
+MERGED; issues #697 and #700 are both CLOSED.** PR #736's CI history is worth knowing about
+even though it's resolved: the run on commit `6c39ead`
+(`https://github.com/sovereignsquad/general-design-system/actions/runs/34149880005` — the PR's
+**second** run; its first, run `34149738421` on commit `c694d2c`, was fully green) had
 `validate (mantine-9)` pass but `validate (mantine-7)` fail inside `verify:forced-colors-runtime`
 on a headless-Chrome DevTools-connection timeout preceded by a cascade of `Failed to connect to
 the bus` (dbus) errors — a runner-environment problem, not a real defect (that script and
 `scripts/lib/browser-runtime.mjs` are untouched by #697's diff, and `mantine-9` ran the
-identical check on the identical commit and passed). A job rerun
-(`gh run rerun 34149880005 --repo sovereignsquad/general-design-system --failed`) came back
-**fully green** (`mantine-7` pass 9m47s, `mantine-9` pass, `budget report` pass;
-run `34150727441`), confirming the flake diagnosis. **If you see this exact dbus/DevTools
-signature on a future PR, a rerun is the right first move, not a code investigation** — but if
-it recurs repeatedly across different PRs, that graduates from "one-off flake" to "worth
-checking whether the runner image or a workflow file changed."
+identical check on the identical commit and passed). **That run's URL now shows `success`**: an
+in-place `gh run rerun --failed` overwrites the run's top-level conclusion, so the original
+failure is visible only under `.../attempts/1`, not the URL itself. That rerun (attempt 2 of
+`34149880005`) came back green (`mantine-7` pass, 10m22s). A separate run on the next commit
+(`683f02e`, run `34150727441`) was also fully green (`mantine-7` pass 9m47s, `mantine-9` pass,
+`budget report` pass), independently confirming the flake diagnosis. **If you see this exact
+dbus/DevTools signature on a future PR, a rerun is the right first move, not a code
+investigation** — but if it recurs repeatedly across different PRs, that graduates from
+"one-off flake" to "worth checking whether the runner image or a workflow file changed."
 
 Everything in this repo right now is one big effort: delivering **GDS 6.8.0 milestone 35,
 "GDS 6.8.0 - Your Field Delivery"** (org project 11:
 https://github.com/orgs/sovereignsquad/projects/11) — a new governed brand preset (`your-field`,
 a v3 re-base of the ClassScout brand) plus the components, axis extensions, and playground
-capabilities it needs. Tracking issue: **#692**. Of 28 filed issues, **13 are closed**, **15
+capabilities it needs. Tracking issue: **#692**. Of 28 filed issues, **14 are closed**, **14
 remain open**, one of which (#692 itself) is the tracking issue that should stay open until
-every other one closes. **The very next step is simply: pick the next open issue from §7 and
-follow the §3 loop** — there is no pending PR, no pending CI, no uncommitted state to resolve
-first.
+every other one closes. **The next step: let #701 land first** (see above) — **then** pick the
+next open issue from §7 and follow the §3 loop. #702 is the earliest unblocked pick and the
+only remaining blocker of #703.
 
 ---
 
@@ -69,9 +82,14 @@ or that this session specifically had to apply repeatedly:
 - **Rule 13:** never push without a local, clean, start-to-finish `npm run preflight` run on a
   **clean working tree** (commit first, or the "dirty tree" blind spot in §6 below applies).
   Never report done before CI is actually confirmed green — watch it, don't assume it.
-- Inside `.ts`/`.tsx` files, write `issue NNN`, never `#NNN` — the `gds-compliance` raw-hex
-  scanner treats a `#`-prefixed short alphanumeric string as a potential hex color literal and
-  flags it. `.md` files are fine with `#NNN` (matches this repo's own CHANGELOG/doc convention).
+- In *code* (a string/JSX literal) inside `apps/playground`, `apps/reference-vite`, or
+  `apps/reference-next` — the only three apps `verify:references` scans — write `issue NNN`,
+  never `#NNN`: the `gds-compliance` raw-hex pattern (`/#(?:[0-9a-fA-F]{3,8})\b/`,
+  `packages/gds-compliance/index.js:7`) reads a `#NNN` code literal as a hex color. Comments and
+  JSDoc are safe either way — `stripComments()` (issue 615) blanks them before this rule runs,
+  and a passing test asserts `#600` in a comment produces no finding. Package source
+  (`packages/gds-*`) isn't scanned by this rule at all. `.md` files are fine with `#NNN`
+  (matches this repo's own CHANGELOG/doc convention).
 
 The owner works from a device with no terminal access. Every git operation is the agent's to
 execute, and per the session's standing instruction this milestone is to be delivered
@@ -132,7 +150,13 @@ CI-green merges every time. Follow it as-is unless a specific issue's spec requi
 9. **Merge** (`gh pr merge <N> --merge --delete-branch=false`) once every check is green.
 10. **Sync branches**: `git fetch origin main:main && git checkout dev && git rebase main dev &&
     git push origin dev`. Confirm `git rev-parse dev origin/dev main` all match afterward.
-11. **Move to the next open issue** in the milestone. No further confirmation needed per the
+11. **Update org project 11 (CLAUDE.md Rule 7).** Check `gh auth status` for the `project`
+    scope. If present: `gh project item-list 11 --owner sovereignsquad` to find the item, set
+    its `Status` to `Done`, and refresh its free-text `Dependency Signal` (this field goes
+    stale the same way #692's own table does — e.g. as of this writing #697's still reads "Seq
+    04/27 - blocked by 693 (lane merge)" although the issue is Done). If the scope is missing,
+    say so plainly rather than skipping silently.
+12. **Move to the next open issue** in the milestone. No further confirmation needed per the
     standing instruction in §2.
 
 ---
@@ -170,6 +194,15 @@ Every one of the four issues above followed the §3 loop exactly, including the
 "delegate → independently re-verify → find something real → fix → commit → preflight → push →
 watch CI → merge → sync" shape.
 
+**A later, separate session closed one more issue after this window:** **#700** (SemanticButton
+`outline-accent`/`gradient` intents, v3 micro-action states) merged via
+[PR #738](https://github.com/sovereignsquad/general-design-system/pull/738) on
+2026-09-08T10:13:35Z. That PR's `gradient` intent is the first real consumer of #697's
+`--gds-ai-gradient` token — it widened `scripts/verify-ai-reserved-usage.mjs`'s allowlist by one
+entry (see §5's correction below) — but it did **not** update §5's or §6's prose describing
+that token family as consumer-less, and did not update this document at all; that's part of what
+this 2026-09-09 correction pass fixes.
+
 ---
 
 ## 5. #697 in detail — merged; read this before touching Scout AI / `your-field` code again
@@ -179,8 +212,10 @@ watch CI → merge → sync" shape.
 the `your-field` preset only, plus a reserved-usage governance contract and a new mechanical
 gate (`scripts/verify-ai-reserved-usage.mjs`, wired into `verify:release`) that fails loudly if
 any file under `packages/gds-core/src/**` or `packages/gds-theme/styles.css` references
-`--gds-ai-` outside an explicit allowlist (empty today, by design — no consuming component
-ships in this issue).
+`--gds-ai-` outside an explicit allowlist. **The allowlist was empty at the time #697 merged (no
+consuming component shipped in that issue) but is not empty anymore**: issue #700 (merged via
+PR #738, see §4) widened it by one exact-line entry for `SemanticButton`'s new `gradient` brand
+intent, keyed on `data-gds-brand-button='gradient'` in `packages/gds-theme/styles.css:383`.
 
 **The one thing the issue text itself didn't know about, discovered and handled correctly this
 session:** `packages/gds-theme/src/your-field.ts` already had a **separate, older, still-live**
@@ -199,16 +234,21 @@ instead** — the two mechanisms coexisting long-term, rather than one being ret
 explicit decision anyone made; it's just where #693 and #697 happened to land.
 
 **Dark siblings** (the handoff bundle defines no dark scheme at all) were authored, never
-copied from light, using this file's own existing `ensureContrast`/`mixCssColors` recipe — the
-identical recipe `deriveVibeSemanticCssVariables` already uses for this same preset's generic
-accent's dark sibling (`semantic-token-source.ts` line ~318). `ai.accent`/`ai.gradient` clear
-≥3:1 against `canvasDark`; `ai.panel`'s two stops clear ≥3:1 against `surfaceDark` (the actual
-surface the panel sits on, not the canvas behind it).
+copied from light, in `packages/gds-theme/src/vibe-themes.ts` (lines 137–158), reusing
+`color-math`'s `ensureContrast`/`mixCssColors` helpers — the identical recipe
+`deriveVibeSemanticCssVariables` already uses for this same preset's generic accent's dark
+sibling (`semantic-token-source.ts` line 318). `ai.accent`/`ai.gradient` clear ≥3:1 against
+`canvasDark`; `ai.panel`'s two stops clear ≥3:1 against `surfaceDark` (the actual surface the
+panel sits on, not the canvas behind it).
 
-**`tokensWithGaps` budget** ratcheted 86 → 89 (the three new tokens have no consumer yet, by
-design, so they land on the `demoed`/`variationsShown`/`useCase` gap every mechanism-ahead-of-
-adoption token in this milestone hits — same structural reason as issue #698's layout axis
-entry in the same budget file, read that entry for the full mechanism explanation).
+**`tokensWithGaps` budget** ratcheted 86 → 89 at the time #697 merged (the three new tokens had
+no consumer yet, by design, so they landed on the `demoed`/`variationsShown`/`useCase` gap every
+mechanism-ahead-of-adoption token in this milestone hits — same structural reason as issue
+#698's layout axis entry in the same budget file). **That "no consumer" framing is now stale**:
+#700 (§4) gave `--gds-ai-gradient` a real consumer in `packages/gds-theme/styles.css:383`.
+`audit/budgets.json`'s own `tokensWithGaps.justifiedBy` text has not been updated to reflect
+this — that's a real drift in the budget file itself, left as-is here rather than fixed as a
+drive-by (it needs its own governance-reviewed change, not a doc-only commit).
 
 **Verified this session, independently, after the delegated agent's own report:** full-diff
 review of all 31 changed files against the issue's exact Section 9/11 code shapes (all
@@ -272,16 +312,22 @@ shape recurred at least three times this session — always double-check the rea
   only ever produce them via these scripts. If a future issue genuinely does add new
   user-facing copy, the translation step becomes mandatory and this workaround does not apply —
   check whether network access to `translate.googleapis.com` has been restored first.
-- **`audit/budgets.json` is an exact-match ratchet, in both directions.** Every value must
-  equal the currently-measured value exactly. If your change makes a measured number *better*
-  (lower drift, more coverage) without tightening the budget to match, you leave unclaimed
-  "slack" that lets the corresponding entry in `scripts/audit/gate-mutants.config.mjs`'s
-  mutation-test suite survive undetected — i.e. `verify:budgets`' own self-test
-  (`verify-budgets-real.test.mjs`) will fail. Every value change needs a `justifiedBy` prose
-  entry, evidence-based, **prepended** before any existing text for that key (never delete
-  prior justifications — they're a decision log). This recurred on nearly every issue this
-  session: #711 (`obligationGaps` 356→355), #709 (`undeclaredMantineDependencies` 80→81),
-  #695 (`publishedGraphOverlap` 189→208), #697 (`tokensWithGaps` 86→89).
+- **`audit/budgets.json` is a ratchet in both directions, with a 10% slack tolerance — not an
+  exact-match gate.** `scripts/verify-budgets.mjs` has `const DEFAULT_SLACK = 0.10` (a
+  per-budget `slackTolerance` can override it); a measurement worse than the budget is
+  `EXCEEDED`, a measurement better than `budget × (1 ± 0.10)` is `UNCLAIMED_SLACK`, anything
+  in between reports `OK`. Only a zero-valued budget is truly exact-match. **Known drift at
+  HEAD**: `publishedGraphOverlap` is budgeted 208 while the committed artifact measures 211 —
+  inside the 10% tolerance, so the gate reports `OK`, but it is not the exact-match state this
+  bullet used to claim. House rule is still to tighten to the measured value rather than bank
+  slack, because slack inside the tolerance is exactly what lets a
+  `scripts/audit/gate-mutants.config.mjs` mutant survive undetected — `verify:budgets`' own
+  self-test (`verify-budgets-real.test.mjs`) exists to catch exactly that. Every value change
+  needs a `justifiedBy` prose entry, evidence-based, **prepended** before any existing text for
+  that key (never delete prior justifications — they're a decision log). This recurred on
+  nearly every issue this session: #711 (`obligationGaps` 356→355), #709
+  (`undeclaredMantineDependencies` 80→81), #695 (`publishedGraphOverlap` 189→208), #697
+  (`tokensWithGaps` 86→89).
 - **Gate-mutant configs (`scripts/audit/gate-mutants.config.mjs`) and some allowlists
   (`scripts/token-reachability.config.mjs`, `scripts/density-token-adoption.config.mjs`) are
   keyed by exact file:line or exact source text.** An unrelated edit that shifts lines, or a
@@ -292,9 +338,11 @@ shape recurred at least three times this session — always double-check the rea
   give it a `reason` and a concrete `reviewBy` date (this milestone has been using
   `2026-12-01` consistently for "follow-on issue in the same delivery will consume this").
 - **This repo's `GdsLayoutToken`/similar closed-union props do not take raw numbers or
-  arbitrary strings** — `GdsStack`'s `gap` is `0 | 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' |
-  '2xl'` (`packages/gds-core/src/LayoutPrimitives.tsx:8` — verified directly against source,
-  not assumed; re-check if it's moved by the time you read this).
+  arbitrary strings** — `GdsStack`'s `gap` is `GdsResponsiveValue<GdsLayoutToken>`
+  (`packages/gds-core/src/LayoutPrimitives.tsx:8,35`): either the token itself
+  (`0 | 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'`) or a partial per-breakpoint map of
+  those tokens — not a flat union alone. Verified directly against source; re-check if it's
+  moved by the time you read this.
 - **Icon sourcing is real-icons-only, always pre-verify before delegating**: `@tabler/icons-react`
   first (check `node_modules/@tabler/icons-react/dist/esm/icons/` for the exact export name),
   then iconify.design's collections, preferring stroke-style; `fillMode?: 'stroke' | 'fill'` on
@@ -308,39 +356,47 @@ shape recurred at least three times this session — always double-check the rea
 
 ---
 
-## 7. Remaining open issues (15, including the tracking issue — refreshed 2026-09-07 post-#697-merge via `gh issue list`, re-check before trusting)
+## 7. Remaining open issues (14, including the tracking issue — refreshed 2026-09-09 post-#738-merge via `gh issue list`, re-check before trusting)
 
 | Issue | Title | Note |
 | --- | --- | --- |
 | #692 | Tracking: Your Field brand lane and delivery | Keep open until every other row closes. Its own delivery-board table is stale (§3) — don't trust it for per-issue status. |
-| #700 | SemanticButton — outline-accent/gradient intents, v3 micro-action states | Was blocked by #693 + #697. Both now closed/merged — unblocked. |
-| #701 | ListingCard — featured ring, pick overlay badge, generated-tile default media | Was blocked by #693 merge — #693 is closed, so unblocked. |
-| #702 | SidebarNav — light-surface variant, promo/profile slots | Was blocked by #693 + #698 — both closed, unblocked. |
-| #703 | GdsScoutPromoPanel + GdsProfileSwitcher | Was blocked by #702 + #697. #697 now closed/merged; check #702's actual status before starting. |
+| #701 | ListingCard — featured ring, pick overlay badge, generated-tile default media | **IN FLIGHT** — 41 files staged uncommitted in the working tree right now (§1). Do not start; finish/commit/land it first. |
+| #702 | SidebarNav — light-surface variant, promo/profile slots | Was blocked by #693 + #698 — both closed, unblocked. Earliest unblocked pick after #701 lands. |
+| #703 | GdsScoutPromoPanel + GdsProfileSwitcher | **BLOCKED.** #697 is closed, but #702 (its other blocker) is still open — do not start until #702 merges. |
 | #707 | Browse canvas — viewport-fill, list/split/map view modes | Was blocked by #698 — closed, unblocked. |
 | #712 | GdsBurgerMenu + BottomTabBar emphasized center tab | Was blocked by #698 — closed, unblocked. |
 | #714 | Media: generated-first default sweep | Independent per #692's board. |
 | #715 | Playground: components catalog inline rendering | Independent; unblocks #716. |
-| #716 | Playground: site-wide element search (CommandPalette) | Blocked by #715. |
+| #716 | Playground: site-wide element search (CommandPalette) | Blocked by #715 (still open). |
 | #717 | Governance: brand-request archive, gap-analysis record, class-usa continuity note | Independent. |
 | #718 | Newsletter capture — promotion to core | `priority: p2`, backlog. |
 | #719 | Standalone pagination contract | `priority: p2`, backlog. |
 | #720 | Testimonial block | `priority: p2`, backlog. |
 | #721 | Booking-slot schedule view | `priority: p2`, backlog. |
 
+**#700** (SemanticButton — outline-accent/gradient intents) is no longer in this table: it
+closed via PR #738 on 2026-09-08 (§4) — do not re-pick it.
+
 **Not in this milestone but worth knowing about:** issue #723 (`Build: gds-core lazy locale
 registry - tsup ignored-bare-import warnings under sideEffects:false`, milestone: none,
-`priority: p2`, `status: backlog`) tracks a **pre-existing, already-known, already-filed**
-build warning (Vite's `ignored-bare-import` for lazy locale chunks, plus a "chunks larger than
-700 kB" warning) that shows up in every single `npm run build` of the playground in this
-environment, unrelated to any of this milestone's changes. It predates this session, has its
-own tracking issue, and does not need to be treated as a Rule-1 blocker for milestone work —
-don't be alarmed if you see it; don't try to fix it as a side effect of an unrelated issue.
+`priority: p2`, `status: backlog`) tracks a **pre-existing, already-known, already-filed** build
+warning — tsup's `Ignoring this import because "src/locales/lazy/<locale>.ts" was marked as
+having no side effects [ignored-bare-import]`, emitted for all 11 lazy locale modules twice per
+`gds-core` build (CJS+ESM), because `packages/gds-core/package.json` declares
+`"sideEffects": false`. It shows up in every single `npm run build` in this environment,
+unrelated to any of this milestone's changes. It predates this session, has its own tracking
+issue, and does not need to be treated as a Rule-1 blocker for milestone work — don't be
+alarmed if you see it; don't try to fix it as a side effect of an unrelated issue. (This is the
+one narrow, pre-existing exception CLAUDE.md Rule 1 tolerates — see §2.)
 
 There is also one closed-but-worth-knowing-about issue: **#722** (dependency audit — tiptap
-prototype-pollution advisory) was closed within this milestone's issue range but is a security/
-dependency matter, not brand-lane work — if `npm run audit:dependencies` ever flags something
-new, check whether it's the same advisory reopening or something genuinely new.
+prototype-pollution advisory, GHSA-cp6q-959q-f8rh) — it **is** a member of this milestone
+(counted in the 28-filed/14-closed totals above, not merely "in the issue-number range"), but
+it is a security/dependency matter, not brand-lane work — if `npm run audit:dependencies` ever
+flags something new, check whether it's the same advisory reopening or something genuinely new.
+Housekeeping: it is still labeled `status: in progress` although closed, and it is the only
+milestone-35 issue with no item on org project 11.
 
 ---
 
@@ -378,15 +434,23 @@ meant to be followed, not summarized from a title.
 
 ## 10. If you read nothing else
 
-1. **Nothing is pending.** #736 merged, #697 is closed, `dev`/`main`/`origin` are all synced
-   at the same commit (§1) — go straight to picking the next issue.
-2. Work down the table in §7, following the loop in §3, applying every gotcha in §6.
+1. **#701 is in flight, not pending merge review — it's mid-implementation.** #736 and #738
+   are merged, `dev`/`main`/`origin` are all synced at `bdf6008` (§1), but 41 files are staged
+   uncommitted for #701 right now. Land that (commit → preflight → push → PR → CI → merge →
+   sync, §3) before picking anything else; #702 is next after it.
+2. Work down the table in §7, following the loop in §3 (now 12 steps — §3 step 11 adds an org
+   project 11 update per CLAUDE.md Rule 7), applying every gotcha in §6.
 3. Full monorepo `npm run build`, never a scoped one — this alone caught a real bug on #709.
-4. `audit/budgets.json` is an exact-match ratchet in both directions, with a prepended
-   justification for every change — never leave unclaimed slack.
+4. `audit/budgets.json` is a ratchet in both directions **with a 10% slack tolerance, not
+   exact-match** (§6) — still tighten to the measured value rather than bank slack, with a
+   prepended justification for every change.
 5. No AI attribution anywhere in repository text (Rule 9/17) — check what you write before
    committing it, not after.
 6. `npm run artifacts:refresh` cannot currently run end-to-end (translation API blocked) — use
    the manual step sequence in §6 for any issue that adds no new user-facing copy.
 7. This milestone is to be delivered end-to-end, issue by issue, without pausing for
    confirmation between issues, per the owner's standing instruction (§2) — keep going.
+8. This document is a snapshot, not a live query — every commit hash, issue count, and CI run
+   ID in it starts going stale the moment it's committed (that's exactly how it drifted twice
+   between 2026-09-07 and 2026-09-09). Re-run the `gh`/`git` commands it cites rather than
+   trusting the numbers if any meaningful time has passed since the correction date at the top.
